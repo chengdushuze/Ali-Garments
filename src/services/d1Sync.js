@@ -3,36 +3,44 @@ import { getSettings, getSyncQueue, clearSyncQueue, addToSyncQueue } from './sto
 const MAX_CHUNK_BYTES = 1800000; // ~1.8 MB safety threshold for 2MB SQLite limit
 
 /**
- * Executes a query against Cloudflare D1 via Vercel serverless proxy or direct endpoint
+ * Executes a query against Cloudflare D1 via Cloudflare Pages Function proxy (/api/d1) or direct REST endpoint
  */
 export async function executeD1Query(sql, params = [], customSettings = null) {
   const settings = customSettings || (await getSettings());
 
+  // Check if browser/device is offline
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return {
+      success: false,
+      isOffline: true,
+      message: 'Device is offline. Changes saved in high-speed local memory.'
+    };
+  }
+
+  const endpoint = settings.d1ProxyUrl || '/api/d1';
   const accountId = settings.d1AccountId?.trim();
   const databaseId = settings.d1DatabaseId?.trim();
   const apiToken = settings.d1ApiToken?.trim();
 
-  // If credentials are not configured, treat as local-only mode
-  if (!accountId || !databaseId || !apiToken) {
-    return {
-      success: false,
-      isConfigured: false,
-      message: 'Cloudflare D1 is not configured. Running in high-speed local cache mode.'
-    };
-  }
-
-  const directCfUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-  const isNative = typeof window !== 'undefined' && (
-    window.Capacitor?.isNativePlatform?.() ||
-    window.location.protocol === 'file:' ||
-    window.location.protocol === 'capacitor:' ||
-    window.location.hostname === 'localhost' && !window.location.port.includes('3000')
-  );
-
-  let response;
   try {
-    if (isNative) {
-      // Direct Cloudflare API call in native mobile environment
+    // 1. Try Cloudflare Pages /api/d1 endpoint (Native env.DB binding)
+    const headers = { 'Content-Type': 'application/json' };
+    if (accountId) headers['x-cf-account-id'] = accountId;
+    if (databaseId) headers['x-cf-database-id'] = databaseId;
+    if (apiToken) headers['x-cf-api-token'] = apiToken;
+
+    let response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ sql, params })
+    }).catch(err => {
+      console.warn('Proxy fetch failed, attempting fallback...', err);
+      return null;
+    });
+
+    // 2. Direct Cloudflare REST fallback if proxy fails and direct credentials are provided
+    if ((!response || response.status === 404 || response.status === 405 || !response.ok) && accountId && databaseId && apiToken) {
+      const directCfUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
       response = await fetch(directCfUrl, {
         method: 'POST',
         headers: {
@@ -40,32 +48,15 @@ export async function executeD1Query(sql, params = [], customSettings = null) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ sql, params })
-      });
-    } else {
-      // Try Vercel Serverless proxy first
-      const endpoint = settings.d1ProxyUrl || '/api/d1';
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-cf-account-id': accountId,
-          'x-cf-database-id': databaseId,
-          'x-cf-api-token': apiToken
-        },
-        body: JSON.stringify({ sql, params })
-      });
+      }).catch(() => null);
+    }
 
-      // If proxy returned 404 (e.g. static preview or local dev without serverless), fallback to direct
-      if (response.status === 404 || response.status === 405) {
-        response = await fetch(directCfUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ sql, params })
-        });
-      }
+    if (!response) {
+      return {
+        success: false,
+        isOffline: true,
+        message: 'Network offline or server unreachable. Saved in local cache.'
+      };
     }
 
     const data = await response.json().catch(() => ({}));
@@ -93,12 +84,11 @@ export async function executeD1Query(sql, params = [], customSettings = null) {
       data: data.result || data
     };
   } catch (error) {
-    // Network offline or failed fetch
     return {
       success: false,
       isOffline: true,
       error: error.message,
-      message: 'Network offline or server unreachable. Changes preserved in local memory.'
+      message: 'Network offline. Changes preserved in local memory.'
     };
   }
 }
@@ -158,13 +148,7 @@ export async function initD1Tables(customSettings = null) {
  * then gracefully creates chunk_index 1, 2, etc.
  * Conserves D1 daily query/write limits!
  */
-export async function syncCustomerToD1(customer, transactions) {
-  const settings = await getSettings();
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    // Just local cache
-    return { success: true, localOnly: true };
-  }
-
+export async function syncCustomerToD1(customer, transactions, bypassQueue = false) {
   try {
     const now = new Date().toISOString();
     const jsonStr = JSON.stringify(transactions || []);
@@ -243,12 +227,13 @@ export async function syncCustomerToD1(customer, transactions) {
     ]);
 
     if (!custRes.success) {
-      // If quota exceeded or offline, queue it!
-      await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+      if (!bypassQueue) {
+        await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+      }
       return custRes;
     }
 
-    // Upsert the chunk row(s)
+    // Upsert chunk rows
     for (const chunk of chunks) {
       const chunkSql = `
         INSERT INTO customer_chunks (customer_id, chunk_index, transactions_json, byte_size, count, updated_at)
@@ -270,7 +255,9 @@ export async function syncCustomerToD1(customer, transactions) {
       ]);
 
       if (!chunkRes.success) {
-        await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+        if (!bypassQueue) {
+          await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+        }
         return chunkRes;
       }
     }
@@ -281,29 +268,25 @@ export async function syncCustomerToD1(customer, transactions) {
     };
   } catch (err) {
     console.error('Error syncing customer to D1:', err);
-    await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+    if (!bypassQueue) {
+      await addToSyncQueue({ type: 'sync_customer', customer, transactions });
+    }
     return { success: false, error: err.message, message: 'Saved locally; sync queued.' };
   }
 }
 
 /**
- * Invoices are created and kept strictly in local storage (browser/app)
- * to save Cloudflare D1 query and write limits/credits.
+ * Invoices are created and kept strictly in local storage
  */
 export async function syncInvoiceToD1(invoice) {
-  // Intentionally local-only to save D1 write limits & credits as requested.
-  return { success: true, localOnly: true, message: 'Invoice saved locally in app (Zero D1 credits used)' };
+  return { success: true, localOnly: true, message: 'Invoice saved locally in app' };
 }
 
 /**
- * Pulls all customers and their 1-row transaction chunks from Cloudflare D1
- * using only 2 high-efficiency queries (minimizes D1 credits/quota usage).
+ * Pulls all customers and chunks from D1
  */
 export async function pullAllFromD1(customSettings = null) {
   const settings = customSettings || (await getSettings());
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: false, message: 'D1 credentials not configured.' };
-  }
 
   try {
     const res = await executeD1Query(`
@@ -380,66 +363,67 @@ export async function processSyncQueue() {
     return { success: true, processedCount: 0 };
   }
 
+  console.log(`[SyncEngine] Processing ${queue.length} pending offline items...`);
   let successCount = 0;
   const remaining = [];
 
   for (const item of queue) {
     let res = null;
     if (item.type === 'sync_customer') {
-      res = await syncCustomerToD1(item.customer, item.transactions);
+      res = await syncCustomerToD1(item.customer, item.transactions, true);
+    } else if (item.type === 'delete_customer') {
+      res = await deleteCustomerFromD1(item.customerId, true);
+    } else if (item.type === 'sync_recycle_bin') {
+      res = await syncRecycleBinItemToD1(item.binItem, true);
+    } else if (item.type === 'delete_recycle_bin') {
+      res = await deleteRecycleBinItemFromD1(item.binId, true);
     }
 
     if (res && res.success) {
       successCount++;
     } else {
-      if (item.type !== 'sync_invoice') {
-        remaining.push(item);
-      }
+      remaining.push(item);
       if (res && res.isQuotaExceeded) {
-        // Quota still exceeded, stop queue processing for now
         break;
       }
     }
   }
 
-  if (remaining.length === 0) {
-    await clearSyncQueue();
+  // Update remaining queue
+  await clearSyncQueue();
+  for (const r of remaining) {
+    await addToSyncQueue(r);
   }
+  const queueRemaining = remaining.length;
+
+  console.log(`[SyncEngine] Flushed ${successCount} items to D1. Remaining in offline queue: ${queueRemaining}`);
 
   return {
     success: true,
     processedCount: successCount,
-    remainingCount: remaining.length
+    remainingCount: queueRemaining
   };
 }
 
 /**
  * Removes a customer and their chunk row from Cloudflare D1
  */
-export async function deleteCustomerFromD1(customerId) {
-  const settings = await getSettings();
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: true, localOnly: true };
-  }
-
+export async function deleteCustomerFromD1(customerId, bypassQueue = false) {
   const sql = `
     DELETE FROM customer_chunks WHERE customer_id = ?;
     DELETE FROM customers WHERE customer_id = ?;
   `;
-  return await executeD1Query(sql, [customerId, customerId]);
+  const res = await executeD1Query(sql, [customerId, customerId]);
+  if (!res.success && !bypassQueue) {
+    await addToSyncQueue({ type: 'delete_customer', customerId });
+  }
+  return res;
 }
 
 /**
  * Syncs a deleted item to Cloudflare D1 Recycle Bin with 30-day auto-purge
  */
-export async function syncRecycleBinItemToD1(binItem) {
-  const settings = await getSettings();
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: true, localOnly: true };
-  }
-
-  // 1. Insert into recycle_bin
-  // 2. Automatically purge any items older than 30 days across all devices
+export async function syncRecycleBinItemToD1(binItem, bypassQueue = false) {
   const sql = `
     DELETE FROM recycle_bin WHERE expires_at <= CURRENT_TIMESTAMP;
     INSERT INTO recycle_bin (bin_id, item_type, customer_id, title, item_json, deleted_at, expires_at)
@@ -449,7 +433,7 @@ export async function syncRecycleBinItemToD1(binItem) {
       expires_at = excluded.expires_at;
   `;
 
-  return await executeD1Query(sql, [
+  const res = await executeD1Query(sql, [
     binItem.id,
     binItem.type,
     binItem.customerId || null,
@@ -458,33 +442,32 @@ export async function syncRecycleBinItemToD1(binItem) {
     binItem.deletedAt,
     binItem.expiresAt
   ]);
+
+  if (!res.success && !bypassQueue) {
+    await addToSyncQueue({ type: 'sync_recycle_bin', binItem });
+  }
+  return res;
 }
 
 /**
  * Removes an item from D1 Recycle Bin (upon restore or permanent purge)
  */
-export async function deleteRecycleBinItemFromD1(binId) {
-  const settings = await getSettings();
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: true, localOnly: true };
-  }
-
+export async function deleteRecycleBinItemFromD1(binId, bypassQueue = false) {
   const sql = `
     DELETE FROM recycle_bin WHERE bin_id = ?;
     DELETE FROM recycle_bin WHERE expires_at <= CURRENT_TIMESTAMP;
   `;
-  return await executeD1Query(sql, [binId]);
+  const res = await executeD1Query(sql, [binId]);
+  if (!res.success && !bypassQueue) {
+    await addToSyncQueue({ type: 'delete_recycle_bin', binId });
+  }
+  return res;
 }
 
 /**
  * Empties all items from D1 Recycle Bin
  */
 export async function clearD1RecycleBin() {
-  const settings = await getSettings();
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: true, localOnly: true };
-  }
-
   return await executeD1Query('DELETE FROM recycle_bin;');
 }
 
@@ -493,12 +476,8 @@ export async function clearD1RecycleBin() {
  */
 export async function pullRecycleBinFromD1(customSettings = null) {
   const settings = customSettings || (await getSettings());
-  if (!settings.d1AccountId || !settings.d1DatabaseId || !settings.d1ApiToken) {
-    return { success: false, message: 'D1 not configured' };
-  }
 
   try {
-    // Purge expired items (> 30 days old) and select remaining active items
     const sql = `
       DELETE FROM recycle_bin WHERE expires_at <= CURRENT_TIMESTAMP;
       SELECT bin_id, item_type, customer_id, title, item_json, deleted_at, expires_at FROM recycle_bin ORDER BY deleted_at DESC;

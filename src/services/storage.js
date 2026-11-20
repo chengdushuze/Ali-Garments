@@ -16,8 +16,8 @@ const DEFAULT_SETTINGS = {
   ntn: 'NTN-786014-9',
   currency: 'Rs.',
   logoUrl: '', // Base64 or URL
-  d1AccountId: '',
-  d1DatabaseId: '',
+  d1AccountId: '539f9c0944aec5d144b69a9cb0ed123f',
+  d1DatabaseId: '5fbfb37e-e24a-4b51-9401-e861ff4b6dc1',
   d1ApiToken: '',
   d1ProxyUrl: '/api/d1',
   bankName: 'Meezan Bank Limited',
@@ -276,4 +276,31 @@ export async function restoreFullBackupData(backupData) {
     }
   }
   return true;
+}
+
+
+export async function getCachedAuthUser() {
+  try {
+    return await localforage.getItem('cached_auth_user');
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function setCachedAuthUser(user) {
+  try {
+    await localforage.setItem('cached_auth_user', user);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function clearCachedAuthUser() {
+  try {
+    await localforage.removeItem('cached_auth_user');
+    return true;
+  } catch (e) {
+    return false;
+  }
 }

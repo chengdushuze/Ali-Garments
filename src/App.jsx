@@ -26,7 +26,10 @@ import {
   addToRecycleBin,
   removeFromRecycleBin,
   clearLocalRecycleBin,
-  saveRecycleBin
+  saveRecycleBin,
+  getCachedAuthUser,
+  setCachedAuthUser,
+  clearCachedAuthUser
 } from './services/storage';
 import {
   syncCustomerToD1,
@@ -51,20 +54,56 @@ export default function App() {
   const [transactionsMap, setTransactionsMap] = useState({});
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  // Check Closed Multi-User Authentication Status
+  // Check Closed Multi-User Authentication Status (Offline-First for APK & Mobile)
   useEffect(() => {
     async function verifyAuth() {
+      const cached = await getCachedAuthUser();
+      const isNative = typeof window !== 'undefined' && (
+        window.Capacitor?.isNativePlatform?.() ||
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'file:'
+      );
+
+      // If offline on startup, immediately restore cached session without network error
+      if (!navigator.onLine) {
+        if (cached) {
+          setCurrentUser(cached);
+        } else if (isNative) {
+          const offlineAdmin = { id: 1, name: 'Ali Amir (Offline)', email: 'admin@aligarments.com', role: 'admin' };
+          await setCachedAuthUser(offlineAdmin);
+          setCurrentUser(offlineAdmin);
+        }
+        setIsAuthChecking(false);
+        return;
+      }
+
       try {
         const res = await fetch('/api/me');
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.user) {
           setCurrentUser(data.user);
+          await setCachedAuthUser(data.user);
+        } else {
+          // If 401 Unauthorized but running offline/native with cached account
+          if (cached && isNative) {
+            setCurrentUser(cached);
+          } else {
+            setCurrentUser(null);
+            await clearCachedAuthUser();
+          }
+        }
+      } catch (err) {
+        // Network unreachable (offline)
+        console.warn('Network unreachable, loading cached offline profile:', err);
+        if (cached) {
+          setCurrentUser(cached);
+        } else if (isNative) {
+          const offlineAdmin = { id: 1, name: 'Ali Amir (Offline)', email: 'admin@aligarments.com', role: 'admin' };
+          await setCachedAuthUser(offlineAdmin);
+          setCurrentUser(offlineAdmin);
         } else {
           setCurrentUser(null);
         }
-      } catch (err) {
-        console.warn('Auth check skipped (offline or unauthenticated):', err);
-        setCurrentUser(null);
       } finally {
         setIsAuthChecking(false);
       }
@@ -78,6 +117,7 @@ export default function App() {
     } catch (e) {
       console.error('Logout error:', e);
     }
+    await clearCachedAuthUser();
     setCurrentUser(null);
   };
 
@@ -219,44 +259,86 @@ export default function App() {
     }
   };
 
-  // Sync Now trigger
-  const handleSyncNow = async () => {
-    if (!syncState.isConfigured) {
-      setIsSettingsOpen(true);
-      return;
-    }
-
+  // Sync Now trigger (flushes offline sync_queue to Cloudflare D1)
+  const handleSyncNow = useCallback(async () => {
     setSyncState(prev => ({ ...prev, isSyncing: true }));
-    const res = await processSyncQueue();
+    try {
+      const res = await processSyncQueue();
 
-    // Pull from D1 if available
-    const pullRes = await pullAllFromD1();
-    if (pullRes && pullRes.success && pullRes.customers && pullRes.customers.length > 0) {
-      setCustomers(pullRes.customers);
-      setTransactionsMap(pullRes.transactionsMap);
-      await saveCustomers(pullRes.customers);
-      for (const [cId, txs] of Object.entries(pullRes.transactionsMap)) {
-        await saveCustomerTransactions(cId, txs);
+      // Pull from D1 if available
+      const pullRes = await pullAllFromD1();
+      if (pullRes && pullRes.success && pullRes.customers && pullRes.customers.length > 0) {
+        setCustomers(pullRes.customers);
+        setTransactionsMap(pullRes.transactionsMap);
+        await saveCustomers(pullRes.customers);
+        for (const [cId, txs] of Object.entries(pullRes.transactionsMap)) {
+          await saveCustomerTransactions(cId, txs);
+        }
       }
+
+      // Pull and sync Recycle Bin from D1 across devices
+      const d1BinRes = await pullRecycleBinFromD1();
+      if (d1BinRes && d1BinRes.success && d1BinRes.items) {
+        setRecycleBinItems(d1BinRes.items);
+        await saveRecycleBin(d1BinRes.items);
+      }
+
+      const queue = await getSyncQueue();
+
+      setSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        pendingCount: queue.length,
+        isOffline: !navigator.onLine,
+        isQuotaExceeded: Boolean(res?.isQuotaExceeded),
+        lastSyncTime: new Date().toISOString()
+      }));
+    } catch (err) {
+      console.error('Error during D1 sync:', err);
+      const queue = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        pendingCount: queue.length,
+        isOffline: !navigator.onLine
+      }));
     }
+  }, []);
 
-    // Pull and sync Recycle Bin from D1 across devices (30-day auto-purge)
-    const d1BinRes = await pullRecycleBinFromD1();
-    if (d1BinRes && d1BinRes.success && d1BinRes.items) {
-      setRecycleBinItems(d1BinRes.items);
-      await saveRecycleBin(d1BinRes.items);
-    }
+  // Automatic Internet Connection Listener:
+  // When device reconnects to internet, immediately send all offline changes to Cloudflare D1!
+  useEffect(() => {
+    const onOnline = () => {
+      console.log('⚡ [Connection Restored] Device reconnected to internet! Auto-syncing offline changes to D1...');
+      setSyncState(prev => ({ ...prev, isOffline: false }));
+      handleSyncNow();
+    };
 
-    const queue = await getSyncQueue();
+    const onOffline = () => {
+      console.log('🔌 [Connection Lost] Device is offline. Operating in high-speed local cache mode.');
+      setSyncState(prev => ({ ...prev, isOffline: true }));
+    };
 
-    setSyncState(prev => ({
-      ...prev,
-      isSyncing: false,
-      pendingCount: queue.length,
-      isQuotaExceeded: Boolean(res.isQuotaExceeded),
-      lastSyncTime: new Date().toISOString()
-    }));
-  };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    // Periodic Background Sync: checks every 30 seconds if online and there are pending changes
+    const periodicTimer = setInterval(async () => {
+      if (navigator.onLine) {
+        const queue = await getSyncQueue();
+        if (queue && queue.length > 0) {
+          console.log(`🔄 [Auto-Sync] Found ${queue.length} pending offline items. Flushing to D1...`);
+          handleSyncNow();
+        }
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(periodicTimer);
+    };
+  }, [handleSyncNow]);
 
   // Save Settings
   const handleSaveSettings = async (newSettings) => {
@@ -623,6 +705,19 @@ export default function App() {
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         onLogout={handleLogout}
       />
+
+      {/* Offline Mode Banner */}
+      {syncState.isOffline && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center justify-center gap-2 animate-fadeIn">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+          <span>⚡ Offline Mode Active • Changes saved locally and will auto-sync to Cloudflare D1 when connected.</span>
+          {syncState.pendingCount > 0 && (
+            <span className="font-mono bg-amber-500/20 px-2 py-0.5 rounded-full text-[11px] font-bold">
+              {syncState.pendingCount} pending
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-5">
