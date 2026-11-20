@@ -10,6 +10,15 @@ async function getAdminSession(req) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   const session = await getAdminSession(req);
   if (!session) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -76,6 +85,40 @@ export default async function handler(req, res) {
         success: true,
         message: `User ${cleanEmail} created successfully`,
         user: { name: name.trim(), email: cleanEmail, role: userRole },
+      });
+    }
+
+    if (req.method === 'DELETE') {
+      const { id } = req.query;
+      if (!id) {
+        return res.status(400).json({ error: 'User ID is required.' });
+      }
+
+      if (parseInt(session.userId, 10) === parseInt(id, 10)) {
+        return res.status(400).json({ error: 'You cannot remove your own active administrator account.' });
+      }
+
+      const cfRes = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sql: 'DELETE FROM users WHERE id = ?',
+          params: [id],
+        }),
+      });
+
+      const data = await cfRes.json();
+      if (!cfRes.ok || !data.success) {
+        console.error('Vercel admin delete user error:', data.errors);
+        return res.status(500).json({ error: 'Something went wrong. Please try again.' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'User removed successfully.',
       });
     }
 
