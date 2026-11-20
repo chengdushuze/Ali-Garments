@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='25' fill='%23059669'/><path d='M30 70 L50 25 L70 70 M38 55 L62 55' stroke='white' stroke-width='8' fill='none' stroke-linecap='round'/></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#059669" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ALI Khata" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="description" content="ALI Garments - Smart Khata & Ledger Management System with Cloudflare D1 integration" />
+    <title>ALI Garments - Smart Khata & Ledger</title>
+    <!-- Inter & JetBrains Mono Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      #preloader {
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        color: #ffffff;
+      }
+      .preloader-emblem {
+        width: 88px;
+        height: 88px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, #059669, #10b981, #f59e0b);
+        padding: 3px;
+        box-shadow: 0 0 35px rgba(16, 185, 129, 0.35);
+        animation: pulseLogo 2s infinite ease-in-out;
+      }
+      .preloader-emblem-inner {
+        width: 100%;
+        height: 100%;
+        background: #020617;
+        border-radius: 21px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 38px;
+        font-weight: 900;
+        letter-spacing: -2px;
+        color: #34d399;
+      }
+      .preloader-title {
+        margin-top: 24px;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        background: linear-gradient(to right, #ffffff, #e2e8f0, #6ee7b7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .preloader-subtitle {
+        margin-top: 6px;
+        font-size: 13px;
+        color: #34d399;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+      }
+      .preloader-bar-bg {
+        width: 160px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 9999px;
+        margin-top: 24px;
+        overflow: hidden;
+        position: relative;
+      }
+      .preloader-bar-fill {
+        position: absolute;
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7);
+        border-radius: 9999px;
+        animation: barAnim 1.4s infinite ease-in-out;
+      }
+      @keyframes pulseLogo {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.04); opacity: 0.9; }
+      }
+      @keyframes barAnim {
+        0% { left: -40%; width: 30%; }
+        50% { left: 40%; width: 50%; }
+        100% { left: 110%; width: 30%; }
+      }
+    </style>
+    <script>
+      if ('serviceWorker' in navigator && !window.location.hostname.includes('localhost')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white min-h-screen overflow-x-hidden">
+    <div id="root">
+      <!-- High-Performance Zero-Delay Custom Loading Screen -->
+      <div id="preloader">
+        <div class="preloader-emblem">
+          <div class="preloader-emblem-inner">AG</div>
+        </div>
+        <div class="preloader-title">ALI GARMENTS</div>
+        <div class="preloader-subtitle">Smart Khata & Digital Ledger</div>
+        <div class="preloader-bar-bg">
+          <div class="preloader-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
