@@ -56,11 +56,11 @@ export default function Navbar({
             {currentUser?.role === 'admin' && (
               <button
                 onClick={onOpenAdminPanel}
-                title="Admin User Management Portal"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition-all active:scale-95"
+                title="Admin User Management Portal & Passwords"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-sm transition-all active:scale-95 cursor-pointer"
               >
-                <Shield className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Admin Users</span>
+                <Shield className="w-3.5 h-3.5 text-amber-500" />
+                <span>Admin</span>
               </button>
             )}
 

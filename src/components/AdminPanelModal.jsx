@@ -12,7 +12,10 @@ import {
   RefreshCw,
   Clock,
   HardDriveDownload,
-  Loader2
+  Loader2,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
@@ -25,6 +28,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
+
+  // Password reset state for a specific user
+  const [passwordResetUser, setPasswordResetUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -54,7 +64,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   }, [isOpen, currentUser]);
 
-  if (!isOpen) return null;
+  // Strict Security Guard: Only users with role === 'admin' can render the Admin Panel
+  if (!isOpen || currentUser?.role !== 'admin') return null;
 
   // 1. Create User Handler
   const handleCreateUser = async (e) => {
@@ -154,6 +165,55 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       });
     } finally {
       setDeletingUserId(null);
+    }
+  };
+
+  // 3. Change User Password Handler
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (!passwordResetUser || !newPassword) {
+      setPasswordError('Please enter a new password.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: passwordResetUser.id,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        setPasswordError(data.error || 'Failed to update password.');
+        setIsUpdatingPassword(false);
+        return;
+      }
+
+      setStatusMessage({
+        type: 'success',
+        text: `Password for "${passwordResetUser.name}" (${passwordResetUser.email}) was successfully changed!`,
+      });
+
+      setPasswordResetUser(null);
+      setNewPassword('');
+    } catch (err) {
+      console.error('Change password error:', err);
+      setPasswordError('Failed to connect to server. Please try again.');
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -447,10 +507,24 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                           <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[11px] text-slate-500 font-mono hidden sm:inline mr-1">
                             #{u.id}
                           </span>
+
+                          {/* Change Password Button */}
+                          <button
+                            onClick={() => {
+                              setPasswordResetUser(u);
+                              setNewPassword('');
+                              setPasswordError('');
+                              setShowNewPassword(false);
+                            }}
+                            title={`Change Password for ${u.name}`}
+                            className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-950/40 transition-colors cursor-pointer"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
 
                           {/* Remove User Button */}
                           <button
@@ -478,6 +552,102 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
             </div>
           </div>
         </div>
+
+        {/* Change Password Dialog Overlay */}
+        {passwordResetUser && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Key className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">Change User Password</h4>
+                    <p className="text-xs text-slate-400">
+                      {passwordResetUser.name} ({passwordResetUser.email})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setPasswordResetUser(null);
+                    setNewPassword('');
+                    setPasswordError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {passwordError && (
+                <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+                    New Password (min 6 characters)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      minLength={6}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordResetUser(null);
+                      setNewPassword('');
+                      setPasswordError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingPassword}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 active:scale-95 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isUpdatingPassword ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-3.5 h-3.5" />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex justify-end">
