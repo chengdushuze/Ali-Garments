@@ -1,14 +1,13 @@
-import { verifySessionToken, hashPassword, verifyPassword } from '../_auth.js';
+import { verifySessionToken, hashPassword, verifyPassword, getSessionTokenFromRequest } from '../_auth.js';
+
+const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
+const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
 
 async function getAdminSession(request, env) {
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const match = cookieHeader.match(/session=([^;]+)/);
-  const token = match ? match[1] : null;
-
+  const token = getSessionTokenFromRequest(request);
   if (!token) return null;
   const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
-  const session = await verifySessionToken(token, secret);
-  return session;
+  return await verifySessionToken(token, secret);
 }
 
 async function recordAudit(env, session, request, action, details) {
@@ -40,19 +39,27 @@ async function recordAudit(env, session, request, action, details) {
 // GET /api/admin/users - List all users
 export async function onRequestGet(context) {
   const { request, env } = context;
+
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+
   const session = await getAdminSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  if (session.role !== 'admin') {
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -63,6 +70,14 @@ export async function onRequestGet(context) {
       try {
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
       } catch (e) {}
+
+      // Auto-provision Super Admin if missing in D1
+      const hasSuper = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ?').bind(SUPER_ADMIN_EMAIL).first();
+      if (!hasSuper) {
+        await env.DB.prepare(
+          'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)'
+        ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run().catch(() => {});
+      }
 
       const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, created_at FROM users ORDER BY created_at DESC').all();
       users = res.results || [];
@@ -84,13 +99,13 @@ export async function onRequestGet(context) {
 
     return new Response(JSON.stringify({ users }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Admin users fetch error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
@@ -98,19 +113,27 @@ export async function onRequestGet(context) {
 // POST /api/admin/users - Create new user account
 export async function onRequestPost(context) {
   const { request, env } = context;
+
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+
   const session = await getAdminSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  if (session.role !== 'admin') {
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Only administrators can create new user accounts.' }), {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -120,11 +143,20 @@ export async function onRequestPost(context) {
     if (!name || !email || !password) {
       return new Response(JSON.stringify({ error: 'Name, email, and password are required.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const cleanEmail = email.toLowerCase().trim();
+
+    // Prevent duplicate Super Admin
+    if (cleanEmail === SUPER_ADMIN_EMAIL || role === 'super_admin') {
+      return new Response(JSON.stringify({ error: 'Super Admin is a unique single account and cannot be created here.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const userRole = role === 'admin' ? 'admin' : 'user';
     const passwordHash = await hashPassword(password);
 
@@ -163,7 +195,7 @@ export async function onRequestPost(context) {
       }),
       {
         status: 201,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
@@ -175,7 +207,7 @@ export async function onRequestPost(context) {
       }),
       {
         status: isConflict ? 409 : 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
@@ -184,19 +216,27 @@ export async function onRequestPost(context) {
 // DELETE /api/admin/users?id=123 - Remove user account
 export async function onRequestDelete(context) {
   const { request, env } = context;
+
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+
   const session = await getAdminSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  if (session.role !== 'admin') {
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -207,7 +247,7 @@ export async function onRequestDelete(context) {
     if (!id) {
       return new Response(JSON.stringify({ error: 'User ID is required.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -215,8 +255,30 @@ export async function onRequestDelete(context) {
     if (parseInt(session.userId, 10) === parseInt(id, 10)) {
       return new Response(JSON.stringify({ error: 'You cannot remove your own active administrator account.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Protection Guard: Super Admin cannot be deleted by ANY admin
+    let targetUser = null;
+    if (env.DB) {
+      targetUser = await env.DB.prepare('SELECT email, role FROM users WHERE id = ?').bind(id).first();
+    } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: 'SELECT email, role FROM users WHERE id = ?', params: [id] }),
+      });
+      const data = await res.json();
+      targetUser = data?.result?.[0]?.results?.[0];
+    }
+
+    if (targetUser && (targetUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL || targetUser.role === 'super_admin')) {
+      return new Response(
+        JSON.stringify({ error: 'Super Admin account is permanently protected and cannot be deleted by any administrator.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (env.DB) {
@@ -249,14 +311,14 @@ export async function onRequestDelete(context) {
       }),
       {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
     console.error('Admin delete user error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
@@ -264,19 +326,27 @@ export async function onRequestDelete(context) {
 // PATCH /api/admin/users - Change user password OR toggle user suspension status (with admin consent verification)
 export async function onRequestPatch(context) {
   const { request, env } = context;
+
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+
   const session = await getAdminSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  if (session.role !== 'admin') {
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -286,7 +356,7 @@ export async function onRequestPatch(context) {
     if (!id || !adminPassword) {
       return new Response(JSON.stringify({ error: 'User ID and admin verification password are required.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -294,14 +364,14 @@ export async function onRequestPatch(context) {
     if (!newPassword && !status) {
       return new Response(JSON.stringify({ error: 'Please specify either a new password or a status update.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (newPassword && newPassword.length < 6) {
       return new Response(JSON.stringify({ error: 'New password must be at least 6 characters long.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -309,8 +379,38 @@ export async function onRequestPatch(context) {
     if (status && status === 'suspended' && parseInt(session.userId, 10) === parseInt(id, 10)) {
       return new Response(JSON.stringify({ error: 'You cannot suspend your own active administrator account.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Protection Guard: Super Admin cannot be suspended, and only Super Admin can change their own password
+    let targetUser = null;
+    if (env.DB) {
+      targetUser = await env.DB.prepare('SELECT email, role FROM users WHERE id = ?').bind(id).first();
+    } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: 'SELECT email, role FROM users WHERE id = ?', params: [id] }),
+      });
+      const data = await res.json();
+      targetUser = data?.result?.[0]?.results?.[0];
+    }
+
+    if (targetUser && (targetUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL || targetUser.role === 'super_admin')) {
+      if (status === 'suspended') {
+        return new Response(
+          JSON.stringify({ error: 'Super Admin account is permanently protected and cannot be suspended.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (newPassword && session.email?.toLowerCase() !== SUPER_ADMIN_EMAIL) {
+        return new Response(
+          JSON.stringify({ error: 'Only the Super Admin can change the Super Admin account password.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // 1. Fetch current admin's stored password hash to verify consent
@@ -463,7 +563,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
     },
   });

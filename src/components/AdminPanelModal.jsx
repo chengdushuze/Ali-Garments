@@ -22,8 +22,12 @@ import {
   ClipboardList,
   Search,
   Activity,
-  History
+  History,
+  Crown
 } from 'lucide-react';
+import { apiFetch } from '../services/apiClient';
+
+const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [adminTab, setAdminTab] = useState('users'); // 'users', 'audit', 'backup'
@@ -67,7 +71,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const fetchUsers = async () => {
     setIsLoadingUsers(true);
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await apiFetch('/api/admin/users');
       const data = await res.json();
       if (res.ok && data.users) {
         setUsersList(data.users);
@@ -83,7 +87,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const fetchAuditLogs = async () => {
     setIsLoadingAudit(true);
     try {
-      const res = await fetch('/api/admin/audit');
+      const res = await apiFetch('/api/admin/audit');
       const data = await res.json();
       if (res.ok && data.logs) {
         setAuditLogs(data.logs);
@@ -96,15 +100,15 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   };
 
   useEffect(() => {
-    if (isOpen && currentUser?.role === 'admin') {
+    if (isOpen && (currentUser?.role === 'admin' || currentUser?.role === 'super_admin')) {
       fetchUsers();
       setStatusMessage({ type: '', text: '' });
       setBackupStatus(null);
     }
   }, [isOpen, currentUser]);
 
-  // Strict Security Guard: Only users with role === 'admin' can render the Admin Panel
-  if (!isOpen || currentUser?.role !== 'admin') return null;
+  // Strict Security Guard: Only users with role === 'admin' or 'super_admin' can render the Admin Panel
+  if (!isOpen || (currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin')) return null;
 
   // 1. Create User Handler
   const handleCreateUser = async (e) => {
@@ -116,9 +120,14 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       return;
     }
 
+    if (email.trim().toLowerCase() === SUPER_ADMIN_EMAIL) {
+      setStatusMessage({ type: 'error', text: 'Super Admin is a unique single account and cannot be recreated.' });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await apiFetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -168,6 +177,11 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       return;
     }
 
+    if (user.role === 'super_admin' || user.email?.toLowerCase() === SUPER_ADMIN_EMAIL) {
+      alert('Super Admin account is permanently protected and cannot be deleted by any administrator.');
+      return;
+    }
+
     const confirmDelete = window.confirm(
       `Are you sure you want to permanently remove user "${user.name}" (${user.email})?`
     );
@@ -177,7 +191,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     setStatusMessage({ type: '', text: '' });
 
     try {
-      const res = await fetch(`/api/admin/users?id=${user.id}`, {
+      const res = await apiFetch(`/api/admin/users?id=${user.id}`, {
         method: 'DELETE',
       });
       const data = await res.json().catch(() => ({}));
@@ -236,7 +250,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
     setIsUpdatingPassword(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -289,7 +303,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     setIsTogglingSuspend(true);
 
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -331,7 +345,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     setBackupStatus(null);
 
     try {
-      const res = await fetch('/api/admin/backup', {
+      const res = await apiFetch('/api/admin/backup', {
         method: 'POST',
       });
       const data = await res.json().catch(() => ({}));
@@ -575,6 +589,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     ) : (
                       usersList.map((u) => {
                         const isSelf = u.id === currentUser?.id;
+                        const isSuper = u.role === 'super_admin' || u.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
                         const isDeleting = deletingUserId === u.id;
 
                         return (
@@ -592,15 +607,22 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                     You
                                   </span>
                                 )}
-                                <span
-                                  className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
-                                    u.role === 'admin'
-                                      ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
-                                      : 'bg-slate-800 text-slate-300 border-slate-700'
-                                  }`}
-                                >
-                                  {u.role}
-                                </span>
+                                {isSuper ? (
+                                  <span className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border bg-gradient-to-r from-amber-500/25 to-purple-500/25 text-amber-300 border-amber-500/50 flex items-center gap-1 font-bold shadow-sm">
+                                    <Crown className="w-3 h-3 text-amber-400" />
+                                    Super Admin
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
+                                      u.role === 'admin'
+                                        ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                                    }`}
+                                  >
+                                    {u.role}
+                                  </span>
+                                )}
                                 <span
                                   className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
                                     u.status === 'suspended'
@@ -620,31 +642,37 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               </span>
 
                               {/* Temporary Suspend / Reactivate User Button */}
-                              {!isSelf && (
-                                <button
-                                  onClick={() => {
-                                    setSuspendingUser(u);
-                                    setSuspendAdminPassword('');
-                                    setSuspendError('');
-                                    setShowSuspendAdminPassword(false);
-                                  }}
-                                  title={
-                                    u.status === 'suspended'
-                                      ? `Reactivate account for ${u.name}`
-                                      : `Temporarily suspend account for ${u.name}`
-                                  }
-                                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                                    u.status === 'suspended'
-                                      ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
-                                      : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
-                                  }`}
-                                >
-                                  {u.status === 'suspended' ? (
-                                    <UserCheck className="w-4 h-4" />
-                                  ) : (
-                                    <UserX className="w-4 h-4" />
-                                  )}
-                                </button>
+                              {isSuper ? (
+                                <span title="Super Admin is protected and cannot be suspended" className="p-2 text-amber-500/40 cursor-not-allowed">
+                                  <Shield className="w-4 h-4" />
+                                </span>
+                              ) : (
+                                !isSelf && (
+                                  <button
+                                    onClick={() => {
+                                      setSuspendingUser(u);
+                                      setSuspendAdminPassword('');
+                                      setSuspendError('');
+                                      setShowSuspendAdminPassword(false);
+                                    }}
+                                    title={
+                                      u.status === 'suspended'
+                                        ? `Reactivate account for ${u.name}`
+                                        : `Temporarily suspend account for ${u.name}`
+                                    }
+                                    className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                                      u.status === 'suspended'
+                                        ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
+                                        : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
+                                    }`}
+                                  >
+                                    {u.status === 'suspended' ? (
+                                      <UserCheck className="w-4 h-4" />
+                                    ) : (
+                                      <UserX className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                )
                               )}
 
                               {/* Change Password Button */}
@@ -675,9 +703,11 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               {/* Remove User Button */}
                               <button
                                 onClick={() => handleDeleteUser(u)}
-                                disabled={isSelf || isDeleting}
+                                disabled={isSelf || isDeleting || isSuper}
                                 title={
-                                  isSelf
+                                  isSuper
+                                    ? 'Super Admin cannot be deleted by any administrator'
+                                    : isSelf
                                     ? 'You cannot remove your own active account'
                                     : `Remove ${u.name}`
                                 }

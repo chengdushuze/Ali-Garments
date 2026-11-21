@@ -55,38 +55,48 @@ export default function InvoiceBuilder({
     // Initialize editable terms & conditions from settings
     setNotes(settings.terms || '1. Sold goods are not returnable without bill.\n2. Payment terms 15 days net.\n3. In case of dispute, Faisalabad jurisdiction applies.');
 
-    // If transactions are selected or customer has ledger history, populate EXACT give or get records!
-    if (customer) {
-      const allTxs = transactionsMap[customer.id] || [];
-      const selected = (selectedTxIds && selectedTxIds.length > 0)
-        ? allTxs.filter(t => selectedTxIds.includes(t.id))
-        : allTxs;
-
-      if (selected.length > 0) {
-        setItems(
-          selected.map(tx => ({
-            id: tx.id,
-            date: tx.date || (tx.dateTime ? tx.dateTime.slice(0, 10) : now.toISOString().slice(0, 10)),
-            type: tx.type || 'give',
-            description: tx.description || (tx.type === 'give' ? 'Maal Diya (You Gave)' : 'Paisa Mila (You Received)'),
-            quantity: 1,
-            rate: Math.abs(Number(tx.amount || 0)),
-            amount: Math.abs(Number(tx.amount || 0))
-          }))
-        );
-        return;
-      }
+    // On invoice, only show customer balance (do NOT populate all historical in and out transactions)
+    const target = customer || (customers && customers.length > 0 ? customers[0] : null);
+    if (target) {
+      const bal = Number(target.balance || 0);
+      const isReceive = bal >= 0;
+      setItems([
+        {
+          id: `item_bal_${Date.now()}`,
+          date: now.toISOString().slice(0, 10),
+          type: isReceive ? 'give' : 'get',
+          description: `Khata Balance (موجودہ بقایا کھاتہ) - ${target.name}`,
+          quantity: 1,
+          rate: Math.abs(bal),
+          amount: Math.abs(bal)
+        }
+      ]);
+      return;
     }
 
-    // Do NOT add any dummy item by default!
     setItems([]);
-  }, [isOpen, customer, selectedTxIds]);
+  }, [isOpen, customer]);
 
   if (!isOpen) return null;
 
   const handleCustomerChange = (custId) => {
     const found = customers.find(c => c.id === custId);
     setSelectedCustomer(found);
+    if (found) {
+      const bal = Number(found.balance || 0);
+      const isReceive = bal >= 0;
+      setItems([
+        {
+          id: `item_bal_${Date.now()}`,
+          date: new Date().toISOString().slice(0, 10),
+          type: isReceive ? 'give' : 'get',
+          description: `Khata Balance (موجودہ بقایا کھاتہ) - ${found.name}`,
+          quantity: 1,
+          rate: Math.abs(bal),
+          amount: Math.abs(bal)
+        }
+      ]);
+    }
   };
 
   const handleItemChange = (index, field, value) => {
@@ -455,21 +465,23 @@ export default function InvoiceBuilder({
               </div>
             </div>
 
-            {/* Right: Calculations with Total Gave or Give Summary */}
-            <div className="w-full sm:w-80 space-y-2 font-mono text-xs bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-              <div className="flex justify-between py-1 text-rose-600 dark:text-rose-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                <span className="whitespace-nowrap">Total Maal Diya (You Gave):</span>
-                <span className="font-bold">{currency} {totalGave.toLocaleString()}</span>
-              </div>
-
-              <div className="flex justify-between py-1 text-emerald-600 dark:text-emerald-400 font-semibold border-b border-slate-200 dark:border-slate-700">
-                <span className="whitespace-nowrap">Total Paisa Mila (You Got):</span>
-                <span className="font-bold">{currency} {totalGot.toLocaleString()}</span>
+            {/* Right: Clean Customer Balance Summary (No In/Out clutter) */}
+            <div className="w-full sm:w-80 space-y-2.5 font-mono text-xs bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="flex justify-between py-1.5 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-600 dark:text-slate-400 font-semibold whitespace-nowrap">Khata Balance:</span>
+                <span className={`font-bold font-mono ${
+                  (selectedCustomer?.balance || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}>
+                  {currency}&nbsp;{Math.abs(selectedCustomer?.balance || 0).toLocaleString()}
+                  <span className="text-[10px] ml-1 font-sans">
+                    {(selectedCustomer?.balance || 0) >= 0 ? '(لینے ہیں)' : '(دینے ہیں)'}
+                  </span>
+                </span>
               </div>
 
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 whitespace-nowrap">Subtotal:</span>
-                <span className="font-bold">{currency} {subtotal.toLocaleString()}</span>
+                <span className="text-slate-500 whitespace-nowrap">Invoice Subtotal:</span>
+                <span className="font-bold">{currency}&nbsp;{subtotal.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between py-1">
@@ -481,7 +493,7 @@ export default function InvoiceBuilder({
                   onChange={e => setDiscount(e.target.value)}
                   className="no-print w-20 text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5"
                 />
-                <span className="print:inline hidden font-bold">-{currency} {discountAmount.toLocaleString()}</span>
+                <span className="print:inline hidden font-bold">-{currency}&nbsp;{discountAmount.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between py-1">
@@ -493,18 +505,14 @@ export default function InvoiceBuilder({
                   onChange={e => setTaxPercent(e.target.value)}
                   className="no-print w-16 text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5"
                 />
-                <span className="print:inline hidden font-bold">+{currency} {taxAmount.toLocaleString()}</span>
+                <span className="print:inline hidden font-bold">+{currency}&nbsp;{taxAmount.toLocaleString()}</span>
               </div>
 
-              <div className="flex justify-between py-2 border-t-2 border-slate-900 dark:border-white text-sm font-bold">
-                <span className="whitespace-nowrap">Grand Total:</span>
+              <div className="flex justify-between py-2.5 border-t-2 border-slate-900 dark:border-white text-sm font-bold">
+                <span className="whitespace-nowrap">Total Invoice Amount:</span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-black">
-                  {currency} {grandTotal.toLocaleString()}
+                  {currency}&nbsp;{grandTotal.toLocaleString()}
                 </span>
-              </div>
-
-              <div className="text-[11px] text-slate-500 pt-1 text-right font-semibold">
-                Net Balance: {netLedgerBalance >= 0 ? `+${currency} ${netLedgerBalance.toLocaleString()} (Receive)` : `-${currency} ${Math.abs(netLedgerBalance).toLocaleString()} (Payable)`}
               </div>
             </div>
           </div>

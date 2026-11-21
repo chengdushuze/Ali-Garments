@@ -15,6 +15,7 @@ import SettingsModal from './components/SettingsModal';
 import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
 import PhoneBottomNav from './components/PhoneBottomNav';
+import { apiFetch, clearStoredToken } from './services/apiClient';
 import {
   getSettings,
   saveSettings,
@@ -79,7 +80,7 @@ export default function App() {
       }
 
       try {
-        const res = await fetch('/api/me');
+        const res = await apiFetch('/api/me');
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.user) {
           setCurrentUser(data.user);
@@ -90,6 +91,7 @@ export default function App() {
             setCurrentUser(cached);
           } else {
             setCurrentUser(null);
+            clearStoredToken();
             await clearCachedAuthUser();
           }
         }
@@ -114,10 +116,11 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await apiFetch('/api/logout', { method: 'POST' });
     } catch (e) {
       console.error('Logout error:', e);
     }
+    clearStoredToken();
     await clearCachedAuthUser();
     setCurrentUser(null);
   };
@@ -877,7 +880,7 @@ export default function App() {
         onOpenExcel={handleDownloadAllExcel}
         onOpenAdmin={() => setIsAdminPanelOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        isAdmin={currentUser?.role === 'admin'}
+        isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'super_admin'}
         selectedCustomer={selectedCustomer}
         onBackToParties={() => {
           setSelectedCustomer(null);

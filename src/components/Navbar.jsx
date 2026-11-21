@@ -50,15 +50,15 @@ export default function Navbar({
 
           {/* Right Action Icons & User Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Admin Portal Button (Admin Role Only) */}
-            {currentUser?.role === 'admin' && (
+            {/* Admin Portal Button (Admin or Super Admin Role) */}
+            {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
               <button
                 onClick={onOpenAdminPanel}
                 title="Admin User Management Portal & Passwords"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
                 <Shield className="w-3.5 h-3.5 text-amber-500" />
-                <span className="whitespace-nowrap">Admin</span>
+                <span className="whitespace-nowrap">{currentUser?.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span>
               </button>
             )}
 

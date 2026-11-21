@@ -1,10 +1,7 @@
-import { verifySessionToken } from '../_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest } from '../_auth.js';
 
 async function getAdminSession(request, env) {
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const match = cookieHeader.match(/session=([^;]+)/);
-  const token = match ? match[1] : null;
-
+  const token = getSessionTokenFromRequest(request);
   if (!token) return null;
   const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
   return await verifySessionToken(token, secret);
@@ -22,7 +19,7 @@ export async function onRequestPost(context) {
     });
   }
 
-  if (session.role !== 'admin') {
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

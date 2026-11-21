@@ -1,11 +1,9 @@
-import { verifySessionToken } from './_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest } from './_auth.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const match = cookieHeader.match(/session=([^;]+)/);
-  const token = match ? match[1] : null;
+  const token = getSessionTokenFromRequest(request);
 
   if (!token) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
