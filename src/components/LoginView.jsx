@@ -6,8 +6,6 @@ import { apiFetch, setStoredToken } from '../services/apiClient';
 const RATE_LIMIT_MAX_ATTEMPTS = 3;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
-const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
-
 function getOfflineAttempts() {
   try {
     const raw = localStorage.getItem('ag_login_attempts');
@@ -60,31 +58,17 @@ export default function LoginView({ onLoginSuccess }) {
       return;
     }
 
-    const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL && password === 'Anamar@06';
-    const isMasterAdmin = cleanEmail === 'admin@aligarments.com' && password === 'Admin@123456';
-
-    // If Super Admin or Master Admin logging in, clear rate limit lock immediately
-    if (isSuperAdmin || isMasterAdmin) {
-      clearOfflineAttempts();
-    } else {
-      // 1. Check Rate Limit (both APK offline & online)
-      const existingAttempts = getOfflineAttempts();
-      if (existingAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
-        const oldest = Math.min(...existingAttempts);
-        const waitMs = Math.max(0, oldest + RATE_LIMIT_WINDOW_MS - Date.now());
-        const minutesRemaining = Math.max(1, Math.ceil(waitMs / 60000));
-        setErrorMessage(`Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}.`);
-        return;
-      }
+    // 1. Check client-side rate limit lock
+    const existingAttempts = getOfflineAttempts();
+    if (existingAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+      const oldest = Math.min(...existingAttempts);
+      const waitMs = Math.max(0, oldest + RATE_LIMIT_WINDOW_MS - Date.now());
+      const minutesRemaining = Math.max(1, Math.ceil(waitMs / 60000));
+      setErrorMessage(`Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}.`);
+      return;
     }
 
     setIsLoading(true);
-
-    const isNative = typeof window !== 'undefined' && (
-      window.Capacitor?.isNativePlatform?.() ||
-      window.location.protocol === 'capacitor:' ||
-      window.location.protocol === 'file:'
-    );
 
     try {
       let response = null;
@@ -100,7 +84,7 @@ export default function LoginView({ onLoginSuccess }) {
           }),
         });
       } catch (fetchErr) {
-        console.warn('Network login failed, evaluating offline/native mode:', fetchErr);
+        console.warn('Network login failed, checking offline session cache:', fetchErr);
       }
 
       if (response) {
@@ -125,57 +109,25 @@ export default function LoginView({ onLoginSuccess }) {
 
           // If 429 Rate limited
           if (response.status === 429 || data.isRateLimited) {
-            if (!isSuperAdmin) recordOfflineFailedAttempt();
+            recordOfflineFailedAttempt();
             setErrorMessage(data.error || 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
             setIsLoading(false);
             return;
           }
 
-          // If 404 (e.g. offline endpoint not reached), fall through to offline check
-          if (response.status !== 404 && response.status !== 502) {
-            const totalFailed = recordOfflineFailedAttempt();
-            if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
-              setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
-            } else {
-              setErrorMessage('Invalid email or password.');
-            }
-            setIsLoading(false);
-            return;
+          // Failed credentials (401 or other)
+          const totalFailed = recordOfflineFailedAttempt();
+          if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
+            setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
+          } else {
+            setErrorMessage(data.error || 'Invalid email or password.');
           }
+          setIsLoading(false);
+          return;
         }
       }
 
-      // Offline or native APK login fallback (when server is offline or unreachable)
-      if (isSuperAdmin) {
-        const superUser = {
-          id: 999,
-          name: 'Super Admin',
-          email: SUPER_ADMIN_EMAIL,
-          role: 'super_admin',
-          status: 'active',
-          is_super_admin: true
-        };
-        clearOfflineAttempts();
-        await setCachedAuthUser(superUser);
-        if (onLoginSuccess) onLoginSuccess(superUser);
-        return;
-      }
-
-      if (isMasterAdmin) {
-        const adminUser = {
-          id: 1,
-          name: 'Ali Amir (Offline)',
-          email: 'admin@aligarments.com',
-          role: 'admin',
-          status: 'active'
-        };
-        clearOfflineAttempts();
-        await setCachedAuthUser(adminUser);
-        if (onLoginSuccess) onLoginSuccess(adminUser);
-        return;
-      }
-
-      // Check cached user
+      // Offline fallback: Check if this user had a previously verified active session on this device
       const cached = await getCachedAuthUser();
       if (cached && cached.email?.toLowerCase() === cleanEmail) {
         if (cached.status === 'suspended' && cached.role !== 'super_admin') {
@@ -188,29 +140,10 @@ export default function LoginView({ onLoginSuccess }) {
         return;
       }
 
-      const totalFailed = recordOfflineFailedAttempt();
-      if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
-        setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
-      } else {
-        setErrorMessage('Invalid email or password.');
-      }
+      // If server could not be reached and no offline cached session exists
+      setErrorMessage('Cannot reach the authentication server. Please check your internet connection.');
     } catch (err) {
       console.error('Login request failed:', err);
-      // Offline Super Admin emergency fallback
-      if (isSuperAdmin) {
-        const superUser = {
-          id: 999,
-          name: 'Super Admin',
-          email: SUPER_ADMIN_EMAIL,
-          role: 'super_admin',
-          status: 'active',
-          is_super_admin: true
-        };
-        clearOfflineAttempts();
-        await setCachedAuthUser(superUser);
-        if (onLoginSuccess) onLoginSuccess(superUser);
-        return;
-      }
       setErrorMessage('Something went wrong. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -218,9 +151,9 @@ export default function LoginView({ onLoginSuccess }) {
   };
 
   return (
-    <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-3 sm:p-6 select-none pt-safe">
-      {/* Top Bar with System Badge (Safe area padded for Android notches) */}
-      <div className="w-full flex justify-between items-center max-w-sm sm:max-w-md mx-auto pt-7 sm:pt-4 px-2 shrink-0">
+    <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-3 sm:p-6 select-none pt-safe pb-safe">
+      {/* Top Bar with System Badge (Safe area padded for Android status bar and notches) */}
+      <div className="w-full flex justify-between items-center max-w-sm sm:max-w-md mx-auto pt-8 sm:pt-4 px-2 shrink-0">
         <div className="flex items-center gap-2">
           <img
             src="/logo.png"
@@ -356,9 +289,14 @@ export default function LoginView({ onLoginSuccess }) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="w-full text-center text-slate-500 text-[11px] py-1 shrink-0">
-        <p>ALI Garments Khata • 5-Day Auto Security Verification</p>
+      {/* Footer & Watermark */}
+      <div className="w-full text-center text-slate-400 text-[11px] sm:text-xs py-2 shrink-0 space-y-1">
+        <p className="flex items-center justify-center gap-1.5 font-medium text-slate-300">
+          <span>Made with</span>
+          <span className="text-rose-500 animate-pulse text-sm">❤️</span>
+          <span className="font-semibold text-slate-200">By Chengdu Shuze International</span>
+        </p>
+        <p className="text-[10px] text-slate-500">ALI Garments Khata • 5-Day Auto Security Verification</p>
       </div>
     </div>
   );

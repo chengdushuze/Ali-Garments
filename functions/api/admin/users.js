@@ -94,7 +94,7 @@ export async function onRequestGet(context) {
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
 
-      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, created_at FROM users ORDER BY created_at DESC').all();
+      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, created_at FROM users ORDER BY created_at DESC').all();
       users = res.results || [];
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -105,7 +105,7 @@ export async function onRequestGet(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, created_at FROM users ORDER BY created_at DESC',
+          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, created_at FROM users ORDER BY created_at DESC',
         }),
       });
       const data = await res.json();
@@ -177,9 +177,9 @@ export async function onRequestPost(context) {
 
     if (env.DB) {
       await env.DB.prepare(
-        'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)'
+        'INSERT INTO users (name, email, password_hash, password_plain, role, status) VALUES (?, ?, ?, ?, ?, ?)'
       )
-        .bind(name.trim(), cleanEmail, passwordHash, userRole)
+        .bind(name.trim(), cleanEmail, passwordHash, password, userRole, 'active')
         .run();
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -190,8 +190,8 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
-          params: [name.trim(), cleanEmail, passwordHash, userRole],
+          sql: 'INSERT INTO users (name, email, password_hash, password_plain, role, status) VALUES (?, ?, ?, ?, ?, ?)',
+          params: [name.trim(), cleanEmail, passwordHash, password, userRole, 'active'],
         }),
       });
       const data = await res.json();
@@ -366,7 +366,7 @@ export async function onRequestPatch(context) {
   }
 
   try {
-    const { id, newPassword, status, adminPassword } = await request.json().catch(() => ({}));
+    const { id, newPassword, status, durationDays, role, adminPassword } = await request.json().catch(() => ({}));
 
     if (!id || !adminPassword) {
       return new Response(JSON.stringify({ error: 'User ID and admin verification password are required.' }), {
@@ -375,9 +375,9 @@ export async function onRequestPatch(context) {
       });
     }
 
-    // Must provide either newPassword or status
-    if (!newPassword && !status) {
-      return new Response(JSON.stringify({ error: 'Please specify either a new password or a status update.' }), {
+    // Must provide either newPassword, status, or role
+    if (!newPassword && !status && !role) {
+      return new Response(JSON.stringify({ error: 'Please specify a new password, status update, or role change.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -481,11 +481,56 @@ export async function onRequestPatch(context) {
     }
 
     // 3. Perform update based on requested action
+    // A) Role Change (Super Admin privilege only)
+    if (role) {
+      if (session.role !== 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Forbidden. Only Super Admin has authority to change user roles.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (targetUser && (targetUser.role === 'super_admin' || targetUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL)) {
+        return new Response(JSON.stringify({ error: 'Super Admin position is permanent and cannot be modified.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const safeRole = role === 'admin' ? 'admin' : 'user';
+
+      if (env.DB) {
+        await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(safeRole, id).run();
+      } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+        const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql: 'UPDATE users SET role = ? WHERE id = ?', params: [safeRole, id] }),
+        });
+      }
+
+      await recordAudit(env, session, request, 'USER_ROLE_CHANGED', `Super Admin changed user #${id} role to ${safeRole}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          role: safeRole,
+          message: `User role has been successfully changed to ${safeRole === 'admin' ? 'Administrator' : 'Standard User'}.`,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // B) Change Password
     if (newPassword) {
       const passwordHash = await hashPassword(newPassword);
       if (env.DB) {
-        await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
-          .bind(passwordHash, id)
+        await env.DB.prepare('UPDATE users SET password_hash = ?, password_plain = ? WHERE id = ?')
+          .bind(passwordHash, newPassword, id)
           .run();
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -496,8 +541,8 @@ export async function onRequestPatch(context) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            sql: 'UPDATE users SET password_hash = ? WHERE id = ?',
-            params: [passwordHash, id],
+            sql: 'UPDATE users SET password_hash = ?, password_plain = ? WHERE id = ?',
+            params: [passwordHash, newPassword, id],
           }),
         });
       }
@@ -511,16 +556,20 @@ export async function onRequestPatch(context) {
         }),
         {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
+    // C) Status Suspension with optional duration in days
     if (status) {
       const safeStatus = status === 'suspended' ? 'suspended' : 'active';
+      const days = (durationDays && Number(durationDays) > 0) ? Number(durationDays) : 0;
+      const suspendedUntil = safeStatus === 'suspended' && days > 0 ? (Date.now() + (days * 24 * 60 * 60 * 1000)) : null;
+
       if (env.DB) {
-        await env.DB.prepare('UPDATE users SET status = ? WHERE id = ?')
-          .bind(safeStatus, id)
+        await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ? WHERE id = ?')
+          .bind(safeStatus, suspendedUntil, id)
           .run();
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -531,31 +580,35 @@ export async function onRequestPatch(context) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            sql: 'UPDATE users SET status = ? WHERE id = ?',
-            params: [safeStatus, id],
+            sql: 'UPDATE users SET status = ?, suspended_until = ? WHERE id = ?',
+            params: [safeStatus, suspendedUntil, id],
           }),
         });
       }
 
+      const durationText = days > 0 ? ` for ${days} day${days > 1 ? 's' : ''}` : ' indefinitely';
       await recordAudit(
         env,
         session,
         request,
         safeStatus === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
-        `Updated user account #${id} status to ${safeStatus}`
+        safeStatus === 'suspended'
+          ? `Suspended user account #${id}${durationText}`
+          : `Reactivated user account #${id}`
       );
 
       return new Response(
         JSON.stringify({
           success: true,
           status: safeStatus,
+          suspended_until: suspendedUntil,
           message: safeStatus === 'suspended'
-            ? 'User account has been temporarily suspended.'
+            ? `User account has been temporarily suspended${durationText}.`
             : 'User account has been successfully reactivated.',
         }),
         {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }

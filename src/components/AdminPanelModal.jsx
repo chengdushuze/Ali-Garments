@@ -23,11 +23,11 @@ import {
   Search,
   Activity,
   History,
-  Crown
+  Crown,
+  Copy,
+  Check
 } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
-
-const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [adminTab, setAdminTab] = useState('users'); // 'users', 'audit', 'backup'
@@ -57,6 +57,16 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [showSuspendAdminPassword, setShowSuspendAdminPassword] = useState(false);
   const [isTogglingSuspend, setIsTogglingSuspend] = useState(false);
   const [suspendError, setSuspendError] = useState('');
+  const [suspendDurationDays, setSuspendDurationDays] = useState('7');
+
+  // Reveal Real Password state (Requires Super Admin Password)
+  const [revealPasswordUser, setRevealPasswordUser] = useState(null);
+  const [revealSuperAdminPassword, setRevealSuperAdminPassword] = useState('');
+  const [showRevealSuperAdminPassword, setShowRevealSuperAdminPassword] = useState(false);
+  const [revealedPassword, setRevealedPassword] = useState('');
+  const [isRevealingPassword, setIsRevealingPassword] = useState(false);
+  const [revealPasswordError, setRevealPasswordError] = useState('');
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Audit Log State
   const [auditLogs, setAuditLogs] = useState([]);
@@ -146,8 +156,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       return;
     }
 
-    if (email.trim().toLowerCase() === SUPER_ADMIN_EMAIL) {
-      setStatusMessage({ type: 'error', text: 'Super Admin is a unique single account and cannot be recreated.' });
+    if (role === 'super_admin') {
+      setStatusMessage({ type: 'error', text: 'Super Admin is a unique single account and cannot be created here.' });
       return;
     }
 
@@ -203,7 +213,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       return;
     }
 
-    if (user.role === 'super_admin' || user.email?.toLowerCase() === SUPER_ADMIN_EMAIL) {
+    if (user.role === 'super_admin') {
       alert('Super Admin account is permanently protected and cannot be deleted by any administrator.');
       return;
     }
@@ -335,6 +345,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
         body: JSON.stringify({
           id: suspendingUser.id,
           status: targetStatus,
+          durationDays: targetStatus === 'suspended' ? Number(suspendDurationDays) : null,
           adminPassword: suspendAdminPassword,
         }),
       });
@@ -362,6 +373,71 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       setSuspendError('Failed to connect to server. Please try again.');
     } finally {
       setIsTogglingSuspend(false);
+    }
+  };
+
+  // 5. Change User Role Handler (Super Admin Only)
+  const handleRoleChange = async (user, targetRole) => {
+    const roleLabel = targetRole === 'admin' ? 'Administrator' : 'Standard User';
+    const confirmPrompt = window.confirm(`Are you sure you want to change ${user.name}'s role to ${roleLabel}?`);
+    if (!confirmPrompt) return;
+
+    const superAdminPassword = prompt(`Please enter your Super Admin password to authorize changing ${user.name}'s role to ${roleLabel}:`);
+    if (!superAdminPassword) return;
+
+    try {
+      const res = await apiFetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: user.id,
+          role: targetRole,
+          adminPassword: superAdminPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Failed to update user role.');
+      } else {
+        setStatusMessage({
+          type: 'success',
+          text: `Role for "${user.name}" (${user.email}) successfully changed to ${roleLabel}!`,
+        });
+        fetchUsers();
+      }
+    } catch (err) {
+      alert('Network error while updating user role.');
+    }
+  };
+
+  // 6. Reveal Real Password Handler (Requires Super Admin Password)
+  const handleRevealPassword = async (e) => {
+    e.preventDefault();
+    if (!revealPasswordUser || !revealSuperAdminPassword) return;
+    setIsRevealingPassword(true);
+    setRevealPasswordError('');
+
+    try {
+      const res = await apiFetch('/api/admin/reveal-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: revealPasswordUser.id,
+          superAdminPassword: revealSuperAdminPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setRevealPasswordError(data.error || 'Failed to reveal password.');
+      } else {
+        setRevealedPassword(data.password);
+      }
+    } catch (err) {
+      setRevealPasswordError('Network error while requesting password.');
+    } finally {
+      setIsRevealingPassword(false);
     }
   };
 
@@ -418,13 +494,32 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
-              <Shield className="w-5 h-5" />
+            <div className={`p-2 rounded-xl border ${
+              currentUser?.role === 'super_admin'
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm shadow-amber-500/20'
+                : 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30'
+            }`}>
+              {currentUser?.role === 'super_admin' ? (
+                <Crown className="w-5 h-5 text-amber-400" />
+              ) : (
+                <Shield className="w-5 h-5" />
+              )}
             </div>
             <div>
-              <h3 className="font-bold text-base sm:text-lg text-white">Admin Management Portal</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base sm:text-lg text-white">
+                  {currentUser?.role === 'super_admin' ? 'Super Admin Control Center' : 'Admin Management Portal'}
+                </h3>
+                {currentUser?.role === 'super_admin' && (
+                  <span className="hidden sm:inline-block px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 rounded-full shadow-sm">
+                    Master Authority
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] sm:text-xs text-slate-400">
-                User Access & Security • Activity Audit • Cloud Backup
+                {currentUser?.role === 'super_admin'
+                  ? 'Role Management • User Passwords • Activity Audit • Cloud Backup'
+                  : 'User Access & Security • Activity Audit • Cloud Backup'}
               </p>
             </div>
           </div>
@@ -616,7 +711,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     ) : (
                       usersList.map((u) => {
                         const isSelf = u.id === currentUser?.id;
-                        const isSuper = u.role === 'super_admin' || u.email?.toLowerCase() === SUPER_ADMIN_EMAIL;
+                        const isSuper = u.role === 'super_admin';
                         const isDeleting = deletingUserId === u.id;
 
                         return (
@@ -657,7 +752,9 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                       : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
                                   }`}
                                 >
-                                  {u.status === 'suspended' ? 'Suspended' : 'Active'}
+                                  {u.status === 'suspended'
+                                    ? `Suspended${u.suspended_until ? ` (${Math.max(1, Math.ceil((u.suspended_until - Date.now()) / (24 * 3600 * 1000)))}d)` : ''}`
+                                    : 'Active'}
                                 </span>
                               </div>
                               <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
@@ -668,9 +765,39 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 #{u.id}
                               </span>
 
+                              {/* Super Admin Role Changer */}
+                              {currentUser?.role === 'super_admin' && !isSuper && (
+                                <button
+                                  onClick={() => handleRoleChange(u, u.role === 'admin' ? 'user' : 'admin')}
+                                  title={u.role === 'admin' ? `Demote ${u.name} to User` : `Promote ${u.name} to Administrator`}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border whitespace-nowrap ${
+                                    u.role === 'admin'
+                                      ? 'bg-amber-950/60 hover:bg-amber-900 text-amber-300 border-amber-700/60'
+                                      : 'bg-blue-950/60 hover:bg-blue-900 text-blue-300 border-blue-700/60'
+                                  }`}
+                                >
+                                  {u.role === 'admin' ? 'Role: Admin ▾' : 'Role: User ▾'}
+                                </button>
+                              )}
+
+                              {/* Reveal Real Password Button (Super Admin Verification) */}
+                              <button
+                                onClick={() => {
+                                  setRevealPasswordUser(u);
+                                  setRevealSuperAdminPassword('');
+                                  setRevealedPassword('');
+                                  setRevealPasswordError('');
+                                  setCopiedPassword(false);
+                                }}
+                                title={`Reveal Real Password for ${u.name} (Requires Super Admin Password)`}
+                                className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-4 h-4 text-emerald-400" />
+                              </button>
+
                               {/* Temporary Suspend / Reactivate User Button */}
                               {isSuper ? (
-                                <span title="Super Admin is protected and cannot be suspended" className="p-2 text-amber-500/40 cursor-not-allowed">
+                                <span title="Super Admin is protected and cannot be suspended under any circumstance" className="p-2 text-amber-500/40 cursor-not-allowed">
                                   <Shield className="w-4 h-4" />
                                 </span>
                               ) : (
@@ -681,6 +808,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                       setSuspendAdminPassword('');
                                       setSuspendError('');
                                       setShowSuspendAdminPassword(false);
+                                      setSuspendDurationDays('7');
                                     }}
                                     title={
                                       u.status === 'suspended'
@@ -1169,6 +1297,32 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
               </p>
 
               <form onSubmit={handleToggleSuspend} className="space-y-4">
+                {/* Duration selector for suspension */}
+                {suspendingUser.status !== 'suspended' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                      Suspension Duration
+                    </label>
+                    <select
+                      value={suspendDurationDays}
+                      onChange={(e) => setSuspendDurationDays(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
+                    >
+                      <option value="1">1 Day (24 Hours)</option>
+                      <option value="3">3 Days</option>
+                      <option value="7">7 Days (1 Week)</option>
+                      <option value="15">15 Days</option>
+                      <option value="30">30 Days (1 Month)</option>
+                      <option value="0">Indefinite (Until manually reactivated)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {suspendDurationDays === '0'
+                        ? 'User will remain suspended indefinitely until manually reactivated.'
+                        : `User will be suspended and automatically reactivated after ${suspendDurationDays} day(s).`}
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
                     Verify Admin Password
@@ -1235,6 +1389,146 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Reveal Password Modal (Requires Super Admin Password) */}
+        {revealPasswordUser && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <Eye className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">Reveal Real Password</h4>
+                    <p className="text-xs text-slate-400">{revealPasswordUser.name} ({revealPasswordUser.email})</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setRevealPasswordUser(null);
+                    setRevealSuperAdminPassword('');
+                    setRevealedPassword('');
+                    setRevealPasswordError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {revealPasswordError && (
+                <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span>{revealPasswordError}</span>
+                </div>
+              )}
+
+              {!revealedPassword ? (
+                <form onSubmit={handleRevealPassword} className="space-y-4">
+                  <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300/90 text-xs">
+                    Security Requirement: To view the real password of this account, you must enter the Super Admin password.
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                      Enter Super Admin Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showRevealSuperAdminPassword ? 'text' : 'password'}
+                        required
+                        value={revealSuperAdminPassword}
+                        onChange={(e) => setRevealSuperAdminPassword(e.target.value)}
+                        placeholder="Super Admin Password"
+                        className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRevealSuperAdminPassword(!showRevealSuperAdminPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {showRevealSuperAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRevealPasswordUser(null);
+                        setRevealSuperAdminPassword('');
+                        setRevealedPassword('');
+                        setRevealPasswordError('');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isRevealingPassword}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      {isRevealingPassword ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Authenticating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Reveal Real Password</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 space-y-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400 block">
+                      Decrypted Password
+                    </span>
+                    <div className="flex items-center justify-between gap-2 p-3 bg-slate-950 rounded-xl border border-emerald-700/50">
+                      <span className="font-mono text-base font-bold text-white tracking-wider select-all break-all">
+                        {revealedPassword}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(revealedPassword);
+                          setCopiedPassword(true);
+                          setTimeout(() => setCopiedPassword(false), 2000);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        {copiedPassword ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedPassword ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRevealPasswordUser(null);
+                        setRevealSuperAdminPassword('');
+                        setRevealedPassword('');
+                        setRevealPasswordError('');
+                      }}
+                      className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

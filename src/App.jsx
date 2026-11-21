@@ -66,14 +66,12 @@ export default function App() {
         window.location.protocol === 'file:'
       );
 
-      // If offline on startup, immediately restore cached session without network error
+      // If offline on startup, restore verified cached session without network error
       if (!navigator.onLine) {
         if (cached) {
           setCurrentUser(cached);
-        } else if (isNative) {
-          const offlineAdmin = { id: 1, name: 'Ali Amir (Offline)', email: 'admin@aligarments.com', role: 'admin' };
-          await setCachedAuthUser(offlineAdmin);
-          setCurrentUser(offlineAdmin);
+        } else {
+          setCurrentUser(null);
         }
         setIsAuthChecking(false);
         return;
@@ -100,10 +98,6 @@ export default function App() {
         console.warn('Network unreachable, loading cached offline profile:', err);
         if (cached) {
           setCurrentUser(cached);
-        } else if (isNative) {
-          const offlineAdmin = { id: 1, name: 'Ali Amir (Offline)', email: 'admin@aligarments.com', role: 'admin' };
-          await setCachedAuthUser(offlineAdmin);
-          setCurrentUser(offlineAdmin);
         } else {
           setCurrentUser(null);
         }
@@ -113,6 +107,31 @@ export default function App() {
     }
     verifyAuth();
   }, []);
+
+  // Real-time Active Session Watcher: Kicks out suspended users immediately & syncs role changes
+  useEffect(() => {
+    if (!currentUser || currentUser.role === 'super_admin') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiFetch('/api/me');
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 || data.isSuspended) {
+          clearStoredToken();
+          await clearCachedAuthUser();
+          setCurrentUser(null);
+          alert(data.error || 'Your account has been temporarily suspended by an administrator.');
+        } else if (res.ok && data.user) {
+          if (data.user.role !== currentUser.role) {
+            setCurrentUser(data.user);
+            await setCachedAuthUser(data.user);
+          }
+        }
+      } catch (e) {}
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
@@ -881,6 +900,7 @@ export default function App() {
         onOpenAdmin={() => setIsAdminPanelOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'super_admin'}
+        isSuperAdmin={currentUser?.role === 'super_admin'}
         selectedCustomer={selectedCustomer}
         onBackToParties={() => {
           setSelectedCustomer(null);

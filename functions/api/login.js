@@ -125,11 +125,6 @@ export async function onRequestPost(context) {
     const now = Date.now();
     const cutoff = now - RATE_LIMIT_WINDOW_MS;
 
-    // Check if this is the Super Admin logging in
-    const isSuperAdminEmail = cleanEmail === SUPER_ADMIN_EMAIL;
-    const isSuperAdminPassword = password === 'Anamar@06';
-    const isSuperAdminLogin = isSuperAdminEmail && isSuperAdminPassword;
-
     // Auto-create rate limiting table in D1 if not exists
     if (env.DB) {
       try {
@@ -139,11 +134,11 @@ export async function onRequestPost(context) {
       } catch (e) {}
     }
 
-    // Check Rate Limiting (Bypassed for Super Admin)
+    // Check Rate Limiting
     let failedCount = 0;
     let oldestAttemptTime = null;
 
-    if (env.DB && !isSuperAdminLogin) {
+    if (env.DB) {
       await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
         .bind(cutoff)
         .run()
@@ -159,7 +154,7 @@ export async function onRequestPost(context) {
       oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
     }
 
-    if (!isSuperAdminLogin && failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+    if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
       const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
       const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
 
@@ -184,7 +179,7 @@ export async function onRequestPost(context) {
     // 2. Query user from Cloudflare D1
     let user = null;
     if (env.DB) {
-      user = await env.DB.prepare('SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ?')
+      user = await env.DB.prepare('SELECT id, name, email, password_hash, role, status, suspended_until FROM users WHERE LOWER(email) = ?')
         .bind(cleanEmail)
         .first();
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
@@ -196,7 +191,7 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ? LIMIT 1',
+          sql: 'SELECT id, name, email, password_hash, role, status, suspended_until FROM users WHERE LOWER(email) = ? LIMIT 1',
           params: [cleanEmail],
         }),
       });
@@ -204,37 +199,33 @@ export async function onRequestPost(context) {
       user = data?.result?.[0]?.results?.[0] || null;
     }
 
-    // Fallback if DB query was transiently empty but credentials are Super Admin
-    if (!user && isSuperAdminLogin) {
-      user = {
-        id: 999,
-        name: 'Super Admin',
-        email: SUPER_ADMIN_EMAIL,
-        password_hash: SUPER_ADMIN_HASH,
-        role: 'super_admin',
-        status: 'active'
-      };
-    }
-
     // Check if user is suspended (Super Admin is NEVER suspended)
     if (user && user.status === 'suspended' && user.role !== 'super_admin') {
-      return new Response(
-        JSON.stringify({
-          error: 'Your account has been temporarily suspended by an administrator. Please contact management.',
-          isSuspended: true,
-        }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      if (user.suspended_until && Date.now() >= user.suspended_until) {
+        // Auto-reactivate expired suspension
+        if (env.DB) {
+          await env.DB.prepare("UPDATE users SET status = 'active', suspended_until = NULL WHERE id = ?").bind(user.id).run().catch(() => {});
         }
-      );
+        user.status = 'active';
+      } else {
+        const remainingDays = user.suspended_until ? Math.ceil((user.suspended_until - Date.now()) / (24 * 60 * 60 * 1000)) : null;
+        const untilMsg = remainingDays ? ` for ${remainingDays} more day(s)` : '';
+        return new Response(
+          JSON.stringify({
+            error: `Your account has been temporarily suspended by an administrator${untilMsg}. Please contact management.`,
+            isSuspended: true,
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
     }
 
-    // Password verification
+    // Password verification via cryptographic PBKDF2 hash
     let isValid = false;
-    if (isSuperAdminLogin) {
-      isValid = true;
-    } else if (user) {
+    if (user && user.password_hash) {
       isValid = await verifyPassword(password, user.password_hash);
     }
 

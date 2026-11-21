@@ -64,8 +64,13 @@ export default function DashboardStats({
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-xl sm:text-2xl xl:text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap leading-tight truncate tracking-tight" title={`${currency} ${totalReceivable.toLocaleString()}`}>
-              {currency}&nbsp;{totalReceivable.toLocaleString()}
+            <div
+              className="inline-flex items-baseline gap-1 font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
+              style={{ whiteSpace: 'nowrap' }}
+              title={`${currency} ${totalReceivable.toLocaleString()}`}
+            >
+              <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0">{currency}</span>
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold truncate shrink-0">{totalReceivable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               From {customers.filter(c => (c.balance || 0) > 0).length} customers
@@ -85,8 +90,13 @@ export default function DashboardStats({
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-xl sm:text-2xl xl:text-3xl font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap leading-tight truncate tracking-tight" title={`${currency} ${totalPayable.toLocaleString()}`}>
-              {currency}&nbsp;{totalPayable.toLocaleString()}
+            <div
+              className="inline-flex items-baseline gap-1 font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
+              style={{ whiteSpace: 'nowrap' }}
+              title={`${currency} ${totalPayable.toLocaleString()}`}
+            >
+              <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0">{currency}</span>
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold truncate shrink-0">{totalPayable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               To {customers.filter(c => (c.balance || 0) < 0).length} suppliers/accounts
@@ -105,10 +115,19 @@ export default function DashboardStats({
             </div>
           </div>
           <div className="mt-3">
-            <div className={`text-xl sm:text-2xl xl:text-3xl font-bold font-mono tabular-nums whitespace-nowrap leading-tight truncate tracking-tight ${
-              netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-            }`} title={`${netBalance < 0 ? '-' : '+'} ${currency} ${Math.abs(netBalance).toLocaleString()}`}>
-              {netBalance < 0 ? '-' : '+'}&nbsp;{currency}&nbsp;{Math.abs(netBalance).toLocaleString()}
+            <div
+              className={`inline-flex items-baseline gap-1 font-bold font-mono tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full ${
+                netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+              }`}
+              style={{ whiteSpace: 'nowrap' }}
+              title={`${netBalance < 0 ? '-' : '+'} ${currency} ${Math.abs(netBalance).toLocaleString()}`}
+            >
+              <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0">
+                {netBalance < 0 ? '-' : '+'} {currency}
+              </span>
+              <span className="text-lg sm:text-xl lg:text-2xl font-bold truncate shrink-0">
+                {Math.abs(netBalance).toLocaleString()}
+              </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               {netBalance >= 0 ? 'Surplus in market' : 'Deficit / Payables higher'}

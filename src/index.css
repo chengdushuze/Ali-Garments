@@ -3,9 +3,23 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
   body {
     -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
   }
+}
+
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+}
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
 }
 
 /* Custom scrollbars */

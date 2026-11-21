@@ -23,6 +23,23 @@ export async function onRequestPost(context) {
       });
     }
 
+    // Real-time suspension check: immediately kick out suspended users!
+    if (env.DB) {
+      try {
+        const dbUser = await env.DB.prepare('SELECT status, suspended_until, role FROM users WHERE id = ?').bind(session.userId).first();
+        if (dbUser && dbUser.status === 'suspended' && dbUser.role !== 'super_admin') {
+          if (dbUser.suspended_until && Date.now() >= dbUser.suspended_until) {
+            await env.DB.prepare("UPDATE users SET status = 'active', suspended_until = NULL WHERE id = ?").bind(session.userId).run().catch(() => {});
+          } else {
+            return new Response(JSON.stringify({ error: 'Your account has been temporarily suspended by an administrator.', isSuspended: true }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
     const { sql, params } = await request.json().catch(() => ({}));
 
     if (!sql) {
