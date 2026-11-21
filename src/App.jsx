@@ -16,7 +16,7 @@ import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
 import PhoneBottomNav from './components/PhoneBottomNav';
 import AppLockScreen from './components/AppLockScreen';
-import { LogOut } from 'lucide-react';
+import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 import {
   getSettings,
@@ -46,7 +46,8 @@ import {
   syncRecycleBinItemToD1,
   deleteRecycleBinItemFromD1,
   clearD1RecycleBin,
-  pullRecycleBinFromD1
+  pullRecycleBinFromD1,
+  saveUserUnsavedDataBeforeLogout
 } from './services/d1Sync';
 import { downloadAllDataExcel } from './services/excelService';
 
@@ -171,13 +172,50 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutSyncStatus, setLogoutSyncStatus] = useState('');
+  const [logoutOfflineWarning, setLogoutOfflineWarning] = useState(null);
+
   // Complete Local Device Wipe upon Logout (removes all cached business & personal data)
-  const handleLogout = async () => {
+  // Ensures any unsaved customer, ledger, or sync queue data is securely pushed to Cloudflare D1 first!
+  const handleLogout = async (force = false) => {
+    setIsLoggingOut(true);
+    setLogoutSyncStatus('Saving and synchronizing unsaved data to Cloudflare D1...');
+
+    try {
+      // 1. Synchronize any unsaved data in queue or local memory to D1
+      const syncRes = await saveUserUnsavedDataBeforeLogout(customers, transactionsMap);
+
+      if (!force && syncRes && syncRes.remainingUnsaved > 0) {
+        setLogoutOfflineWarning({
+          count: syncRes.remainingUnsaved,
+          isOffline: syncRes.isOffline,
+          error: syncRes.error
+        });
+        setIsLoggingOut(false);
+        return false;
+      }
+
+      setLogoutSyncStatus('All data safely saved in Cloudflare D1. Finalizing sign out...');
+    } catch (e) {
+      console.warn('Pre-logout D1 sync warning:', e);
+      if (!force) {
+        setLogoutOfflineWarning({
+          count: 1,
+          isOffline: typeof navigator !== 'undefined' && !navigator.onLine,
+          error: e.message
+        });
+        setIsLoggingOut(false);
+        return false;
+      }
+    }
+
     try {
       await apiFetch('/api/logout', { method: 'POST' });
     } catch (e) {
       console.error('Logout error:', e);
     }
+
     clearStoredToken();
     await clearAllLocalDeviceData();
     setCurrentUser(null);
@@ -189,6 +227,10 @@ export default function App() {
     setIsAdminPanelOpen(false);
     setIsRecycleBinOpen(false);
     setIsSettingsOpen(false);
+    setIsLogoutConsentOpen(false);
+    setIsLoggingOut(false);
+    setLogoutOfflineWarning(null);
+    return true;
   };
 
   // Sync state
@@ -979,34 +1021,76 @@ export default function App() {
               </p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs space-y-1">
-              <p className="font-semibold text-amber-400 flex items-center gap-1">
-                <span>🔒 Local Device Security Protection</span>
-              </p>
-              <p className="text-slate-400 text-[11px] leading-relaxed">
-                All offline ledgers and cached data on this device will be securely wiped. Your records remain safe in Cloudflare D1 and will reload when you sign in again.
-              </p>
-            </div>
+            {/* Offline warning if unsaved data cannot reach D1 */}
+            {logoutOfflineWarning ? (
+              <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-left text-xs space-y-2 text-amber-300">
+                <div className="font-semibold flex items-center gap-1.5 text-amber-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Unsaved Offline Data Detected</span>
+                </div>
+                <p className="text-amber-200/90 text-[11px] leading-relaxed">
+                  {logoutOfflineWarning.isOffline
+                    ? `Device is currently offline with ${logoutOfflineWarning.count} pending item(s). If you sign out now, local changes will be cleared and cannot reach Cloudflare D1.`
+                    : `${logoutOfflineWarning.count} item(s) could not be pushed to Cloudflare D1 right now. We recommend staying signed in until reconnected.`}
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoutOfflineWarning(null);
+                      setIsLogoutConsentOpen(false);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Stay Signed In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLogout(true)}
+                    className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                  >
+                    Sign Out Anyway
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs space-y-1">
+                  <p className="font-semibold text-emerald-400 flex items-center gap-1">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Auto-Save to Cloudflare D1</span>
+                  </p>
+                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                    All unsaved entries, customer balances, and sync queues will automatically be saved to Cloudflare D1 before local device memory is cleared.
+                  </p>
+                </div>
 
-            <div className="flex items-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsLogoutConsentOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Stay Signed In
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setIsLogoutConsentOpen(false);
-                  await handleLogout();
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-950/50 transition-all cursor-pointer"
-              >
-                Yes, Sign Out
-              </button>
-            </div>
+                {isLoggingOut ? (
+                  <div className="py-3 px-4 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-center gap-2.5 text-xs text-emerald-400 font-medium">
+                    <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>{logoutSyncStatus || 'Saving unsaved data to D1...'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsLogoutConsentOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Stay Signed In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLogout(false)}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-950/50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <CloudUpload className="w-4 h-4" />
+                      <span>Save & Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

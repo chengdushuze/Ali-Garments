@@ -516,3 +516,85 @@ export async function pullRecycleBinFromD1(customSettings = null) {
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Synchronizes store settings to Cloudflare D1
+ */
+export async function syncSettingsToD1(settings, customSettings = null) {
+  try {
+    const s = settings || (await getSettings());
+    const now = new Date().toISOString();
+    const safeSettings = { ...s };
+    delete safeSettings.d1ApiToken; // Do not leak API token into database value
+    const sql = `
+      INSERT INTO settings (key, value, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at;
+    `;
+    return await executeD1Query(sql, ['app_settings', JSON.stringify(safeSettings), now], customSettings);
+  } catch (err) {
+    console.error('Error syncing settings to D1:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Ensures all user unsaved data (offline sync queue, modified customers, pending transactions, settings)
+ * are thoroughly synchronized to Cloudflare D1 before user logout.
+ */
+export async function saveUserUnsavedDataBeforeLogout(customers = [], transactionsMap = {}, pendingCustomerIds = []) {
+  const result = {
+    flushedCount: 0,
+    customersSaved: 0,
+    remainingUnsaved: 0,
+    isOffline: false,
+    error: null
+  };
+
+  try {
+    // 1. If device is offline, detect immediately
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const q = await getSyncQueue();
+      result.isOffline = true;
+      result.remainingUnsaved = (q?.length || 0) + (pendingCustomerIds?.length || 0);
+      return result;
+    }
+
+    // 2. Sync pending customer changes if any customer ID was specifically queued or modified
+    if (Array.isArray(pendingCustomerIds) && pendingCustomerIds.length > 0) {
+      for (const custId of pendingCustomerIds) {
+        const cust = customers.find(c => c.id === custId);
+        if (cust) {
+          const txs = transactionsMap[custId] || [];
+          const res = await syncCustomerToD1(cust, txs, false);
+          if (res?.success) {
+            result.customersSaved++;
+          }
+        }
+      }
+    }
+
+    // 3. Process the entire offline sync queue to D1
+    const queueRes = await processSyncQueue();
+    result.flushedCount = queueRes?.processedCount || 0;
+
+    // 4. Backup current store settings to D1
+    const settings = await getSettings();
+    if (settings) {
+      await syncSettingsToD1(settings).catch(() => {});
+    }
+
+    // 5. Final check of remaining queue items
+    const remaining = await getSyncQueue();
+    result.remainingUnsaved = remaining?.length || 0;
+    return result;
+  } catch (err) {
+    console.error('[SyncEngine] Error saving unsaved data before logout:', err);
+    result.error = err.message;
+    const remaining = await getSyncQueue();
+    result.remainingUnsaved = remaining?.length || 0;
+    return result;
+  }
+}
