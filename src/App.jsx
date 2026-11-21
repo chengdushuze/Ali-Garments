@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SplashScreen from './components/SplashScreen';
 import LoadingScreen from './components/LoadingScreen';
 import LoginView from './components/LoginView';
@@ -579,6 +579,25 @@ export default function App() {
     }
   }, []);
 
+  // Automatic synchronization immediately whenever a user signs in or when session is authenticated
+  const lastSyncedUserRef = useRef(null);
+  useEffect(() => {
+    if (currentUser && lastSyncedUserRef.current !== currentUser.id) {
+      lastSyncedUserRef.current = currentUser.id;
+      console.log('🔄 [User Signed In] Automatically synchronizing fresh customer & ledger data from Cloudflare D1...');
+      handleSyncNow();
+    }
+  }, [currentUser, handleSyncNow]);
+
+  // Handler invoked as soon as a user successfully signs in
+  const handleLoginSuccess = useCallback((user) => {
+    setCurrentUser(user);
+    // Explicit immediate background sync
+    setTimeout(() => {
+      handleSyncNow();
+    }, 100);
+  }, [handleSyncNow]);
+
   // Automatic Internet Connection Listener:
   // When device reconnects to internet, immediately send all offline changes to Cloudflare D1!
   useEffect(() => {
@@ -969,7 +988,7 @@ export default function App() {
 
   // If not authenticated, show closed-portal Login Page (Mobile-first, No public signup)
   if (!currentUser) {
-    return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
