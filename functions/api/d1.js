@@ -49,13 +49,27 @@ export async function onRequestPost(context) {
       });
     }
 
-    // 2. Strict Security: Block ANY modification or access to the `users` table from application API!
-    // The users table can ONLY be created/managed via D1 Dashboard console or closed admin endpoints.
-    if (/\busers\b/i.test(sql)) {
-      console.warn(`[Security Alert] Blocked direct query targeting users table by userId=${session.userId}`);
+    // 2. Strict Security: Block SQL Injection, internal schema tampering, and sensitive tables
+    if (typeof sql !== 'string' || sql.length > 200000) {
+      return new Response(JSON.stringify({ error: 'Invalid or oversized query payload.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (params && !Array.isArray(params)) {
+      return new Response(JSON.stringify({ error: 'Query parameters must be formatted as an array.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Block access to sensitive or internal tables (users, login_attempts, sqlite internal tables, pragma)
+    if (/\b(users|login_attempts|sqlite_master|sqlite_schema|sqlite_temp_master|pragma)\b/i.test(sql)) {
+      console.warn(`[Security Alert] Blocked unauthorized query attempt by userId=${session.userId}`);
       return new Response(
         JSON.stringify({
-          error: 'Access denied: The users table can only be edited directly from the Cloudflare D1 dashboard console.'
+          error: 'Access denied: Unauthorized table access blocked by security rules.'
         }),
         {
           status: 403,

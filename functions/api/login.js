@@ -268,6 +268,23 @@ export async function onRequestPost(context) {
       );
     }
 
+    // Determine client device type from User-Agent
+    const userAgent = request.headers.get('User-Agent') || request.headers.get('user-agent') || '';
+    let deviceType = 'Desktop Web';
+    if (/android.*wv|capacitor|cordova/i.test(userAgent)) {
+      deviceType = 'Android App (APK)';
+    } else if (/android/i.test(userAgent)) {
+      deviceType = 'Android Mobile';
+    } else if (/iphone|ipad|ipod/i.test(userAgent)) {
+      deviceType = 'iOS Mobile';
+    } else if (/windows/i.test(userAgent)) {
+      deviceType = 'Windows PC';
+    } else if (/macintosh|mac os/i.test(userAgent)) {
+      deviceType = 'Mac OS';
+    } else if (/linux/i.test(userAgent)) {
+      deviceType = 'Linux';
+    }
+
     // 4. Successful Login: Clear all failed attempts for this email and IP
     if (env.DB) {
       await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
@@ -275,15 +292,35 @@ export async function onRequestPost(context) {
         .run()
         .catch(() => {});
 
-      // Record audit log for successful user login
+      // Record audit log and update last login IP & device info
       try {
         await env.DB.prepare(
           'CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_email TEXT, action TEXT NOT NULL, details TEXT, ip_address TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
-        ).run();
+        ).run().catch(() => {});
+
+        await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_ip TEXT').run().catch(() => {});
+        await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_device TEXT').run().catch(() => {});
+        await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_at DATETIME').run().catch(() => {});
+
+        await env.DB.prepare(
+          'UPDATE users SET last_login_ip = ?, last_login_device = ?, last_login_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).bind(clientIp, deviceType, user.id).run().catch(() => {});
+
         await env.DB.prepare(
           'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
-        ).bind(user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in successfully`, clientIp).run();
+        ).bind(user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in from ${deviceType} (IP: ${clientIp})`, clientIp).run().catch(() => {});
       } catch (e) {}
+    } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+      // Direct REST API fallback
+      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sql: "INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)",
+          params: [user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in from ${deviceType} (IP: ${clientIp})`, clientIp],
+        }),
+      }).catch(() => {});
     }
 
     // 5. Sign session token with SESSION_SECRET (Strict 5-Day Expiration for Security)

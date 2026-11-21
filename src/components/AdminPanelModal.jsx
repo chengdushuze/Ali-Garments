@@ -25,7 +25,9 @@ import {
   History,
   Crown,
   Copy,
-  Check
+  Check,
+  Globe,
+  Smartphone
 } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
 
@@ -100,6 +102,14 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [showClearAuditPassword, setShowClearAuditPassword] = useState(false);
   const [isClearingAudit, setIsClearingAudit] = useState(false);
   const [clearAuditError, setClearAuditError] = useState('');
+
+  // Delete Specific Audit Trail State (Admin / Super Admin, Website own popup - Zero Chrome popups)
+  const [selectedTrailToDelete, setSelectedTrailToDelete] = useState(null);
+  const [showDeleteTrailModal, setShowDeleteTrailModal] = useState(false);
+  const [deleteTrailPassword, setDeleteTrailPassword] = useState('');
+  const [showDeleteTrailPassword, setShowDeleteTrailPassword] = useState(false);
+  const [isDeletingTrail, setIsDeletingTrail] = useState(false);
+  const [deleteTrailError, setDeleteTrailError] = useState('');
 
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -637,6 +647,51 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
+  // Delete specific audit trail record (Admin / Super Admin authorization)
+  const handleConfirmDeleteTrail = async (e) => {
+    e.preventDefault();
+    if (!deleteTrailPassword) {
+      setDeleteTrailError('Administrator password is required to delete this audit record.');
+      return;
+    }
+    if (!selectedTrailToDelete) return;
+
+    setIsDeletingTrail(true);
+    setDeleteTrailError('');
+
+    try {
+      const res = await apiFetch(`/api/admin/audit?id=${selectedTrailToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auditId: selectedTrailToDelete.id,
+          adminPassword: deleteTrailPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setDeleteTrailError(data.error || 'Failed to delete audit record. Please verify password.');
+        return;
+      }
+
+      const deletedId = selectedTrailToDelete.id;
+      setStatusMessage({
+        type: 'success',
+        text: `Audit record #${deletedId} was successfully removed.`,
+      });
+      setShowDeleteTrailModal(false);
+      setSelectedTrailToDelete(null);
+      setDeleteTrailPassword('');
+      setAuditLogs(prev => prev.filter(l => l.id !== deletedId));
+    } catch (err) {
+      console.error('Delete specific audit error:', err);
+      setDeleteTrailError('Network error while deleting audit record.');
+    } finally {
+      setIsDeletingTrail(false);
+    }
+  };
+
   // Filter audit logs
   const filteredAuditLogs = auditLogs.filter(log => {
     if (!auditSearch.trim()) return true;
@@ -1007,7 +1062,26 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                     : 'Active'}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
+                              <div className="flex items-center gap-2.5 text-xs text-slate-400 mt-1 flex-wrap">
+                                <span className="font-mono text-slate-300">{u.email}</span>
+                                {u.last_login_ip && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-800/60 font-semibold" title="Last Login IP Address">
+                                    <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+                                    <span>{u.last_login_ip}</span>
+                                  </span>
+                                )}
+                                {u.last_login_device && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-300 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-700" title="Last Login Device">
+                                    <Smartphone className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span>{u.last_login_device}</span>
+                                  </span>
+                                )}
+                                {u.last_login_at && (
+                                  <span className="text-[10px] text-slate-500 font-mono">
+                                    Active: {new Date(u.last_login_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1201,13 +1275,14 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                         <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Action</th>
                         <th className="py-2.5 px-3 font-semibold whitespace-nowrap">User</th>
                         <th className="py-2.5 px-3 font-semibold">Event Details</th>
-                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">IP Address</th>
+                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Login Device IP</th>
+                        <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Remove</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
                       {filteredAuditLogs.length === 0 ? (
                         <tr>
-                          <td colSpan="5" className="py-8 text-center text-slate-500 text-xs">
+                          <td colSpan="6" className="py-8 text-center text-slate-500 text-xs">
                             {isLoadingAudit ? 'Loading audit trail records...' : 'No activity logs found.'}
                           </td>
                         </tr>
@@ -1222,7 +1297,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                             'bg-slate-800 text-slate-300 border-slate-700';
 
                           return (
-                            <tr key={log.id} className="hover:bg-slate-900/50">
+                            <tr key={log.id} className="hover:bg-slate-900/50 transition-colors">
                               <td className="py-2 px-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
                                 {log.created_at ? new Date(log.created_at).toLocaleString() : 'Recent'}
                               </td>
@@ -1237,8 +1312,27 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               <td className="py-2 px-3 text-slate-300 font-medium">
                                 {log.details}
                               </td>
-                              <td className="py-2 px-3 font-mono text-[10px] text-slate-500 whitespace-nowrap">
-                                {log.ip_address || 'client'}
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-400 font-mono text-[11px] font-semibold">
+                                  <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+                                  <span>{log.ip_address || '127.0.0.1'}</span>
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTrailToDelete(log);
+                                    setShowDeleteTrailModal(true);
+                                    setDeleteTrailPassword('');
+                                    setDeleteTrailError('');
+                                    setShowDeleteTrailPassword(false);
+                                  }}
+                                  title={`Delete audit log #${log.id}`}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/50 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </td>
                             </tr>
                           );
@@ -2132,6 +2226,138 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       <>
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Authorize & Clear Audit Logs</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Specific Audit Trail Modal (In-App Dialog - Zero Chrome Popups) */}
+        {showDeleteTrailModal && selectedTrailToDelete && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      Delete Specific Audit Trail
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Record #{selectedTrailToDelete.id} • Admin Authorization Required
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteTrailModal(false);
+                    setSelectedTrailToDelete(null);
+                    setDeleteTrailPassword('');
+                    setDeleteTrailError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Record Summary Box */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-slate-400">Action:</span>
+                  <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    {selectedTrailToDelete.action}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">User:</span>
+                  <span className="font-mono text-slate-200 font-medium">
+                    {selectedTrailToDelete.user_email || `User #${selectedTrailToDelete.user_id}`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Device IP:</span>
+                  <span className="font-mono text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/50">
+                    {selectedTrailToDelete.ip_address || '127.0.0.1'}
+                  </span>
+                </div>
+                <div className="text-slate-300 pt-1 border-t border-slate-800/80 leading-relaxed">
+                  <strong className="text-slate-400">Details: </strong>
+                  {selectedTrailToDelete.details}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-900/40 text-xs text-amber-300 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>This specific activity entry will be permanently erased from Cloudflare D1.</span>
+              </div>
+
+              <form onSubmit={handleConfirmDeleteTrail} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Enter Admin Password:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showDeleteTrailPassword ? 'text' : 'password'}
+                      value={deleteTrailPassword}
+                      onChange={e => {
+                        setDeleteTrailPassword(e.target.value);
+                        setDeleteTrailError('');
+                      }}
+                      placeholder="Enter administrator password..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-rose-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteTrailPassword(!showDeleteTrailPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showDeleteTrailPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {deleteTrailError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                    {deleteTrailError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteTrailModal(false);
+                      setSelectedTrailToDelete(null);
+                      setDeleteTrailPassword('');
+                      setDeleteTrailError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isDeletingTrail}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isDeletingTrail ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Deleting Record...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Authorize & Delete</span>
                       </>
                     )}
                   </button>

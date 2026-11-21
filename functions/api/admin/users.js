@@ -94,7 +94,12 @@ export async function onRequestGet(context) {
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
 
-      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, created_at FROM users ORDER BY created_at DESC').all();
+      // Ensure last_login columns exist
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_ip TEXT').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_device TEXT').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_at DATETIME').run().catch(() => {});
+
+      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC').all();
       users = res.results || [];
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -105,7 +110,7 @@ export async function onRequestGet(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, created_at FROM users ORDER BY created_at DESC',
+          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC',
         }),
       });
       const data = await res.json();
