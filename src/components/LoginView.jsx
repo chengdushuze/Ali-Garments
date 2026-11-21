@@ -93,27 +93,33 @@ export default function LoginView({ onLoginSuccess }) {
     <div className="min-h-screen w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-4 sm:p-6 md:p-8">
       {/* Top Bar with System Badge */}
       <div className="w-full flex justify-between items-center max-w-md mx-auto pt-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-serif font-black text-white text-base shadow-md shadow-emerald-500/20">
-            AG
-          </div>
+        <div className="flex items-center gap-2.5">
+          <img
+            src="/icon.svg"
+            alt="AG"
+            className="w-8 h-8 rounded-lg shadow-md shadow-emerald-500/20 object-contain"
+          />
           <span className="font-extrabold tracking-tight text-white text-base">
             ALI GARMENTS
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/40 px-2.5 py-1 rounded-full">
           <Shield className="w-3 h-3 text-emerald-400" />
-          <span>Closed Access</span>
+          <span>Closed Portal</span>
         </div>
       </div>
 
       {/* Login Card */}
       <div className="w-full max-w-md mx-auto my-auto py-6">
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60">
-          {/* Header */}
+          {/* Header with Custom ALI Garments Logo */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-lg shadow-emerald-600/30 mb-4">
-              <Lock className="w-7 h-7" />
+            <div className="flex justify-center mb-4">
+              <img
+                src="/icon.svg"
+                alt="ALI Garments Logo"
+                className="w-16 h-16 rounded-2xl shadow-xl shadow-emerald-500/30 border border-emerald-500/40 object-contain hover:scale-105 transition-transform"
+              />
             </div>
             <h2 className="text-2xl font-bold text-white tracking-tight">
               Sign In to Your Khata
@@ -148,7 +154,7 @@ export default function LoginView({ onLoginSuccess }) {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@aligarments.com"
+                  placeholder="Enter your email address"
                   className="w-full pl-10 pr-4 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                 />
               </div>
