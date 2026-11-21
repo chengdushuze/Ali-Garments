@@ -75,17 +75,18 @@ export async function onRequestGet(context) {
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
       } catch (e) {}
 
-      // Auto-provision or update Super Admin permanently in D1
+      // Auto-provision or update Super Admin permanently in D1 (Foreign access & VPN allowed by default)
       const existingSuper = await env.DB.prepare('SELECT id, role, password_hash FROM users WHERE LOWER(email) = ?').bind(SUPER_ADMIN_EMAIL).first();
       if (!existingSuper) {
         await env.DB.prepare(
-          'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)'
+          'INSERT INTO users (name, email, password_hash, role, status, allow_foreign_access, allow_vpn) VALUES (?, ?, ?, ?, ?, 1, 1)'
         ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run().catch(() => {});
-      } else if (existingSuper.role !== 'super_admin' || existingSuper.password_hash !== SUPER_ADMIN_HASH) {
+      } else {
         await env.DB.prepare(
-          'UPDATE users SET role = ?, status = ?, password_hash = ? WHERE LOWER(email) = ?'
+          'UPDATE users SET role = ?, status = ?, password_hash = ?, allow_foreign_access = 1, allow_vpn = 1 WHERE LOWER(email) = ?'
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
+      await env.DB.prepare("UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role = 'super_admin'").run().catch(() => {});
 
       // Proactively purge and drop legacy password_plain column if present
       await env.DB.prepare('UPDATE users SET password_plain = NULL WHERE password_plain IS NOT NULL').run().catch(() => {});

@@ -205,6 +205,17 @@ export default function LoginView({ onLoginSuccess }) {
                     Reset attempt lock (Unlock now)
                   </button>
                 )}
+                {errorMessage.includes('VPN') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage('');
+                    }}
+                    className="block mt-1.5 text-[11px] text-cyan-300 underline hover:text-cyan-200 font-semibold cursor-pointer"
+                  >
+                    I turned off VPN (Retry Connection • دوبارہ کوشش کریں)
+                  </button>
+                )}
               </div>
             </div>
           )}

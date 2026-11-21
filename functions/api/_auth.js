@@ -25,8 +25,9 @@ export function isVpnOrProxy(request) {
     return true;
   }
 
-  // Threat score (> 15 indicates open proxy, Tor, or malicious bot network)
-  if (typeof cf.threatScore === 'number' && cf.threatScore > 15) {
+  // Threat score (> 40 indicates open proxy, Tor, or malicious bot network)
+  // Dynamic residential Pakistani IPs commonly have threat scores up to 25; > 40 catches actual threats
+  if (typeof cf.threatScore === 'number' && cf.threatScore > 40) {
     return true;
   }
 
@@ -49,18 +50,11 @@ export function isVpnOrProxy(request) {
     return true;
   }
 
-  // 2. Check Proxy Headers
-  const viaHeader = request.headers.get('via') || '';
-  const proxyHeader = request.headers.get('x-forwarded-proto') || '';
+  // 2. Check Explicit Proxy Identifiers
+  // Note: We do NOT check generic 'via' headers because standard Pakistani mobile ISPs (Jazz, Zong, PTCL)
+  // route through legitimate transparent proxy caches that set 'Via: 1.1 ...' headers.
   const xProxyId = request.headers.get('x-proxy-id') || '';
-  const xForwardedFor = request.headers.get('x-forwarded-for') || '';
-
-  if (viaHeader || xProxyId) {
-    return true;
-  }
-
-  // Multiple chained hops in X-Forwarded-For typically indicate intermediate proxies
-  if (xForwardedFor && xForwardedFor.split(',').length > 3) {
+  if (xProxyId) {
     return true;
   }
 

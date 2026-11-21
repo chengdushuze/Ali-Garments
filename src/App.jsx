@@ -242,9 +242,11 @@ export default function App() {
       actionText: 'OK, Proceed to Login'
     });
 
-    // Clear stored session tokens immediately
-    clearStoredToken();
-    await clearCachedAuthUser();
+    // Clear stored session tokens immediately (except for VPN notices, so user can re-connect as soon as VPN is turned off)
+    if (type !== 'vpn') {
+      clearStoredToken();
+      await clearCachedAuthUser();
+    }
   }, []);
 
   const handleDismissAccountNotice = () => {
@@ -1356,13 +1358,39 @@ export default function App() {
               </p>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
+              {accountNoticeModal.type === 'vpn' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAccountNoticeModal(prev => ({ ...prev, isOpen: false }));
+                    try {
+                      const res = await apiFetch('/api/me');
+                      const data = await res.json().catch(() => ({}));
+                      if (res.ok && data.user) {
+                        setCurrentUser(data.user);
+                        return;
+                      }
+                    } catch (e) {}
+                    window.location.reload();
+                  }}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>I Turned Off VPN — Reconnect Now</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleDismissAccountNotice}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
+                className={`w-full py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                  accountNoticeModal.type === 'vpn'
+                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold py-3 shadow-lg'
+                }`}
               >
-                {accountNoticeModal.actionText || 'OK, Proceed to Login'}
+                {accountNoticeModal.type === 'vpn' ? 'Log Out / Go to Login' : (accountNoticeModal.actionText || 'OK, Proceed to Login')}
               </button>
             </div>
           </div>

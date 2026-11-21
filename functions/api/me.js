@@ -92,9 +92,10 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Strict Geo Restriction check
+  // Strict Geo Restriction check (Super Admin always allowed)
   const clientCountry = request.cf?.country;
-  if (clientCountry && clientCountry !== 'PK' && liveUser.allow_foreign_access !== 1) {
+  const isSuper = liveUser.role === 'super_admin' || liveUser.email?.toLowerCase() === 'admin@chengdushuze.com';
+  if (clientCountry && clientCountry !== 'PK' && !isSuper && liveUser.allow_foreign_access !== 1) {
     return new Response(
       JSON.stringify({
         error: `Access restricted to Pakistan (PK). Your detected location is ${clientCountry}. Please contact Super Admin for foreign access authorization.`,
@@ -109,8 +110,8 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Strict VPN / Proxy check
-  if (isVpnOrProxy(request) && liveUser.allow_vpn !== 1) {
+  // Strict VPN / Proxy check (Super Admin always allowed)
+  if (isVpnOrProxy(request) && !isSuper && liveUser.allow_vpn !== 1) {
     return new Response(
       JSON.stringify({
         error: 'VPN or Proxy connection detected. Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel.',

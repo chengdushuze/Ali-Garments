@@ -141,10 +141,11 @@ export async function onRequestPost(context) {
       user = data?.result?.[0]?.results?.[0] || null;
     }
 
-    // Check Pakistan-only Geo Restriction
+    // Check Pakistan-only Geo Restriction (Super Admin always has foreign access)
     const clientCountry = request.cf?.country; // Undefined in local dev / native requests
+    const isSuperAdmin = user && (user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com');
     if (clientCountry && clientCountry !== 'PK') {
-      const hasForeignAccess = user && Number(user.allow_foreign_access) === 1;
+      const hasForeignAccess = isSuperAdmin || (user && Number(user.allow_foreign_access) === 1);
       if (!hasForeignAccess) {
         if (env.DB) {
           try {
@@ -175,9 +176,9 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Check Strict VPN / Proxy Policy
+    // Check Strict VPN / Proxy Policy (Super Admin always allowed)
     if (isVpnOrProxy(request)) {
-      if (!user || user.allow_vpn !== 1) {
+      if (!user || (!isSuperAdmin && user.allow_vpn !== 1)) {
         if (env.DB) {
           try {
             await env.DB.prepare(
@@ -328,13 +329,14 @@ export async function onRequestPost(context) {
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
     const FIVE_DAYS_SECONDS = 5 * 24 * 60 * 60; // 432,000 seconds
 
+    const isSuper = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com';
     const sessionPayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role || 'user',
-      allow_vpn: user.allow_vpn || 0,
-      allow_foreign_access: user.allow_foreign_access || 0,
+      allow_vpn: isSuper ? 1 : (user.allow_vpn || 0),
+      allow_foreign_access: isSuper ? 1 : (user.allow_foreign_access || 0),
       ver: user.token_version || 1,
       exp: Date.now() + FIVE_DAYS_MS,
     };
@@ -353,9 +355,9 @@ export async function onRequestPost(context) {
           name: user.name,
           email: user.email,
           role: user.role || 'user',
-          allow_vpn: user.allow_vpn || 0,
-          allow_foreign_access: user.allow_foreign_access || 0,
-          is_super_admin: user.role === 'super_admin' || user.email === SUPER_ADMIN_EMAIL,
+          allow_vpn: isSuper ? 1 : (user.allow_vpn || 0),
+          allow_foreign_access: isSuper ? 1 : (user.allow_foreign_access || 0),
+          is_super_admin: isSuper,
         },
       }),
       {

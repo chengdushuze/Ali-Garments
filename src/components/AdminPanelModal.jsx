@@ -1104,20 +1104,22 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                         return (
                           <div
                             key={u.id}
-                            className="p-3 sm:p-4 flex items-center justify-between hover:bg-slate-900/60 transition-colors"
+                            className="p-3.5 sm:p-4.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-slate-900/50 transition-colors"
                           >
-                            <div className="min-w-0 pr-2">
+                            {/* Left: User Details & Connection Info */}
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              {/* Top row: Name, Role Badges, Status, and #ID */}
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-sm text-white truncate">
+                                <span className="font-bold text-sm text-white tracking-tight">
                                   {u.name}
                                 </span>
                                 {isSelf && (
-                                  <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md">
+                                  <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 rounded-md font-semibold">
                                     You
                                   </span>
                                 )}
                                 {isSuper ? (
-                                  <span className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border bg-gradient-to-r from-amber-500/25 to-purple-500/25 text-amber-300 border-amber-500/50 flex items-center gap-1 font-bold shadow-sm">
+                                  <span className="px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border bg-gradient-to-r from-amber-500/20 to-purple-500/20 text-amber-300 border-amber-500/50 flex items-center gap-1 font-bold shadow-sm">
                                     <Crown className="w-3 h-3 text-amber-400" />
                                     Super Admin
                                   </span>
@@ -1125,7 +1127,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                   <span
                                     className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
                                       u.role === 'admin'
-                                        ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                                        ? 'bg-amber-950/70 text-amber-300 border-amber-800/60'
                                         : 'bg-slate-800 text-slate-300 border-slate-700'
                                     }`}
                                   >
@@ -1135,7 +1137,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 <span
                                   className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
                                     u.status === 'suspended'
-                                      ? 'bg-rose-950/90 text-rose-300 border-rose-850/80'
+                                      ? 'bg-rose-950/90 text-rose-300 border-rose-800/80'
                                       : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
                                   }`}
                                 >
@@ -1143,19 +1145,26 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                     ? `Suspended${u.suspended_until ? ` (${Math.max(1, Math.ceil((u.suspended_until - Date.now()) / (24 * 3600 * 1000)))}d)` : ''}`
                                     : 'Active'}
                                 </span>
+                                <span className="text-[11px] text-slate-500 font-mono">
+                                  #{u.id}
+                                </span>
                               </div>
+
+                              {/* Suspension Notice if Suspended */}
                               {u.status === 'suspended' && (
-                                <div className="text-[11px] text-rose-300/90 italic mt-1 flex items-center gap-1.5 font-sans">
-                                  <span className="font-semibold text-rose-400 not-italic font-mono text-[10px] uppercase">Reason:</span>
-                                  <span>{u.suspension_reason || 'We suspected unusual activity on your account.'}</span>
+                                <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-900/60 rounded-lg px-2.5 py-1 flex items-center gap-1.5 font-sans">
+                                  <span className="font-semibold text-rose-400 font-mono text-[10px] uppercase shrink-0">Reason:</span>
+                                  <span className="italic truncate">{u.suspension_reason || 'We suspected unusual activity on your account.'}</span>
                                 </div>
                               )}
-                              <div className="flex items-center gap-2.5 text-xs text-slate-400 mt-1 flex-wrap">
-                                <span className="font-mono text-slate-300">{u.email}</span>
+
+                              {/* Bottom row: Email, IP Address, Device, Last Active */}
+                              <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
+                                <span className="font-mono text-slate-300 bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-800">{u.email}</span>
                                 {u.last_login_ip && (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-800/60 font-semibold" title="Last Login IP Address">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded-md border border-cyan-800/60 font-semibold max-w-full truncate" title={`Last Login IP: ${u.last_login_ip}`}>
                                     <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
-                                    <span>{u.last_login_ip}</span>
+                                    <span className="truncate">{u.last_login_ip}</span>
                                   </span>
                                 )}
                                 {u.last_login_device && (
@@ -1172,17 +1181,14 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[11px] text-slate-500 font-mono hidden sm:inline mr-1">
-                                #{u.id}
-                              </span>
-
+                            {/* Right: Actions Toolbar (Neatly aligned, zero overlapping) */}
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap shrink-0 justify-start lg:justify-end pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800/80">
                               {/* Super Admin Role Changer */}
                               {currentUser?.role === 'super_admin' && !isSuper && (
                                 <button
                                   onClick={() => handleInitiateRoleChange(u, u.role === 'admin' ? 'user' : 'admin')}
                                   title={u.role === 'admin' ? `Demote ${u.name} to User` : `Promote ${u.name} to Administrator`}
-                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border whitespace-nowrap ${
+                                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer border whitespace-nowrap shadow-sm ${
                                     u.role === 'admin'
                                       ? 'bg-amber-950/60 hover:bg-amber-900 text-amber-300 border-amber-700/60'
                                       : 'bg-blue-950/60 hover:bg-blue-900 text-blue-300 border-blue-700/60'
@@ -1192,35 +1198,18 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 </button>
                               )}
 
-                              {/* Change / Reset Password Button */}
-                              <button
-                                onClick={() => {
-                                  setPasswordResetUser(u);
-                                  setAdminVerificationPassword('');
-                                  setNewPassword('');
-                                  setConfirmNewPassword('');
-                                  setPasswordError('');
-                                  setShowNewPassword(false);
-                                  setShowAdminPassword(false);
-                                }}
-                                title={`Change / Reset Password for ${u.name}`}
-                                className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-emerald-950/40 transition-colors cursor-pointer"
-                              >
-                                <Key className="w-4 h-4 text-emerald-400" />
-                              </button>
-
                               {/* VPN / Proxy Policy Toggle */}
                               {!isSuper && (
                                 <button
                                   onClick={() => handleToggleVpn(u)}
                                   title={`VPN/Proxy access is currently ${u.allow_vpn ? 'ALLOWED' : 'BLOCKED'}. Click to toggle.`}
-                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border flex items-center gap-1 ${
+                                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm ${
                                     u.allow_vpn
                                       ? 'bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border-emerald-700/60'
                                       : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
                                   }`}
                                 >
-                                  <Globe className="w-3 h-3" />
+                                  <Globe className="w-3.5 h-3.5" />
                                   <span>VPN: {u.allow_vpn ? 'Allowed' : 'Blocked'}</span>
                                 </button>
                               )}
@@ -1230,20 +1219,41 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 <button
                                   onClick={() => handleToggleForeign(u)}
                                   title={`Foreign access (outside Pakistan) is currently ${u.allow_foreign_access ? 'ALLOWED' : 'BLOCKED (PK Only)'}. Click to toggle.`}
-                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border flex items-center gap-1 ${
+                                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer border flex items-center gap-1.5 shadow-sm ${
                                     u.allow_foreign_access
                                       ? 'bg-blue-950/70 hover:bg-blue-900 text-blue-300 border-blue-700/60'
                                       : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
                                   }`}
                                 >
-                                  <Globe className="w-3 h-3 text-blue-400" />
+                                  <Globe className="w-3.5 h-3.5 text-blue-400" />
                                   <span>Foreign: {u.allow_foreign_access ? 'Allowed' : 'PK Only'}</span>
                                 </button>
                               )}
 
+                              {/* Single Clean Change / Reset Password Button */}
+                              <button
+                                onClick={() => {
+                                  setPasswordResetUser(u);
+                                  setAdminVerificationPassword('');
+                                  setNewPassword('');
+                                  setConfirmNewPassword('');
+                                  setPasswordError('');
+                                  setShowAdminPassword(false);
+                                  setShowNewPassword(false);
+                                }}
+                                title={isSelf ? 'Change Your Admin Password' : `Change Password for ${u.name}`}
+                                className={`p-2 rounded-xl transition-all cursor-pointer border shadow-sm ${
+                                  isSelf
+                                    ? 'text-amber-300 bg-amber-950/40 hover:bg-amber-950/70 border-amber-800/60'
+                                    : 'text-emerald-400 bg-emerald-950/30 hover:bg-emerald-950/60 border-emerald-800/50'
+                                }`}
+                              >
+                                <Key className="w-4 h-4" />
+                              </button>
+
                               {/* Temporary Suspend / Reactivate User Button */}
                               {isSuper ? (
-                                <span title="Super Admin is protected and cannot be suspended under any circumstance" className="p-2 text-amber-500/40 cursor-not-allowed">
+                                <span title="Super Admin is protected and cannot be suspended" className="p-2 text-amber-500/40 cursor-not-allowed">
                                   <Shield className="w-4 h-4" />
                                 </span>
                               ) : (
@@ -1262,10 +1272,10 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                         ? `Reactivate account for ${u.name}`
                                         : `Temporarily suspend account for ${u.name}`
                                     }
-                                    className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                                    className={`p-2 rounded-xl transition-all cursor-pointer border shadow-sm ${
                                       u.status === 'suspended'
-                                        ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
-                                        : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
+                                        ? 'text-emerald-300 bg-emerald-950/70 hover:bg-emerald-900 border-emerald-700/60'
+                                        : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40 border-slate-800 hover:border-rose-800/60'
                                     }`}
                                   >
                                     {u.status === 'suspended' ? (
@@ -1277,50 +1287,21 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 )
                               )}
 
-                              {/* Change Password Button */}
-                              <button
-                                onClick={() => {
-                                  setPasswordResetUser(u);
-                                  setAdminVerificationPassword('');
-                                  setNewPassword('');
-                                  setConfirmNewPassword('');
-                                  setPasswordError('');
-                                  setShowAdminPassword(false);
-                                  setShowNewPassword(false);
-                                }}
-                                title={
-                                  isSelf
-                                    ? 'Change Your Admin Password'
-                                    : `Change Password for ${u.name}`
-                                }
-                                className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                                  isSelf
-                                    ? 'text-amber-400 bg-amber-950/30 hover:bg-amber-950/60'
-                                    : 'text-slate-400 hover:text-amber-400 hover:bg-amber-950/40'
-                                }`}
-                              >
-                                <Key className="w-4 h-4" />
-                              </button>
-
                               {/* Remove User Button */}
-                              <button
-                                onClick={() => handleInitiateDeleteUser(u)}
-                                disabled={isSelf || isDeleting || isSuper}
-                                title={
-                                  isSuper
-                                    ? 'Super Admin cannot be deleted by any administrator'
-                                    : isSelf
-                                    ? 'You cannot remove your own active account'
-                                    : `Remove ${u.name}`
-                                }
-                                className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition-colors cursor-pointer"
-                              >
-                                {isDeleting ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" />
-                                )}
-                              </button>
+                              {!isSelf && !isSuper && (
+                                <button
+                                  onClick={() => handleInitiateDeleteUser(u)}
+                                  disabled={isDeleting}
+                                  title={`Remove ${u.name}`}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-800/50 transition-all cursor-pointer"
+                                >
+                                  {isDeleting ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
