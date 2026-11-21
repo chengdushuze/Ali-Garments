@@ -667,12 +667,12 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       if (!res.ok || !data.success) {
         setBackupStatus({
           type: 'error',
-          text: data.error || 'Backup operation failed.',
+          text: (data.error || 'Backup operation failed').replace(/\./g, ''),
         });
       } else {
         setBackupStatus({
           type: 'success',
-          text: data.message || 'Nightly backup successfully completed!',
+          text: (data.message || 'Nightly backup successfully completed').replace(/\./g, ''),
           stats: data.stats,
         });
         fetchBackupInfo();
@@ -681,7 +681,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       console.error('Backup error:', err);
       setBackupStatus({
         type: 'error',
-        text: 'Failed to initiate backup. Check your network or D1 binding.',
+        text: 'Failed to initiate backup Check your network or D1 binding',
       });
     } finally {
       setIsBackingUp(false);
