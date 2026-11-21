@@ -42,9 +42,18 @@ export default function LoginView({ onLoginSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleResetLock = () => {
+  const handleResetLock = async () => {
     clearOfflineAttempts();
     setErrorMessage('');
+    if (email) {
+      try {
+        await apiFetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase(), resetLock: true }),
+        });
+      } catch (e) {}
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -54,17 +63,7 @@ export default function LoginView({ onLoginSuccess }) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !password) {
-      setErrorMessage('Please enter both your email and password.');
-      return;
-    }
-
-    // 1. Check client-side rate limit lock
-    const existingAttempts = getOfflineAttempts();
-    if (existingAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
-      const oldest = Math.min(...existingAttempts);
-      const waitMs = Math.max(0, oldest + RATE_LIMIT_WINDOW_MS - Date.now());
-      const minutesRemaining = Math.max(1, Math.ceil(waitMs / 60000));
-      setErrorMessage(`Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}.`);
+      setErrorMessage('Please enter both your email and password');
       return;
     }
 
@@ -102,26 +101,20 @@ export default function LoginView({ onLoginSuccess }) {
         } else {
           // If 403 Suspended
           if (response.status === 403 || data.isSuspended) {
-            setErrorMessage(data.error || 'Your account has been temporarily suspended by an administrator.');
+            setErrorMessage((data.error || 'Your account has been temporarily suspended by an administrator').replace(/\.+$/, ''));
             setIsLoading(false);
             return;
           }
 
           // If 429 Rate limited
           if (response.status === 429 || data.isRateLimited) {
-            recordOfflineFailedAttempt();
-            setErrorMessage(data.error || 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
+            setErrorMessage((data.error || 'Too many failed login attempts (3 maximum)').replace(/\.+$/, ''));
             setIsLoading(false);
             return;
           }
 
           // Failed credentials (401 or other)
-          const totalFailed = recordOfflineFailedAttempt();
-          if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
-            setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
-          } else {
-            setErrorMessage(data.error || 'Email or Password Are incorrect.');
-          }
+          setErrorMessage((data.error || 'Email or Password Are incorrect').replace(/\.+$/, ''));
           setIsLoading(false);
           return;
         }
@@ -195,7 +188,7 @@ export default function LoginView({ onLoginSuccess }) {
             <div className="mb-3 p-2.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 font-medium leading-tight whitespace-pre-line">
-                {errorMessage}
+                {(errorMessage || '').replace(/\.+$/, '')}
                 {errorMessage.includes('locked') && (
                   <button
                     type="button"

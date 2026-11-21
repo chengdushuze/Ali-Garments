@@ -33,21 +33,36 @@ export async function onRequestPost(context) {
   }
 
   try {
-    const { email, password } = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
+    const { email, password, resetLock } = body;
 
-    if (!email || !password) {
-      await new Promise(r => setTimeout(r, 500));
-      return new Response(JSON.stringify({ error: 'Email and password are required.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = (email || '').toLowerCase().trim();
     const clientIp = request.headers.get('CF-Connecting-IP') || 
                      request.headers.get('x-real-ip') || 
                      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
                      'client';
+
+    // Handle immediate lock reset request
+    if (resetLock && cleanEmail) {
+      if (env.DB) {
+        await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
+          .bind(cleanEmail, clientIp)
+          .run()
+          .catch(() => {});
+      }
+      return new Response(JSON.stringify({ success: true, message: 'Login lock reset successfully' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!cleanEmail || !password) {
+      await new Promise(r => setTimeout(r, 500));
+      return new Response(JSON.stringify({ error: 'Email and password are required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const now = Date.now();
     const cutoff = now - RATE_LIMIT_WINDOW_MS;
@@ -61,49 +76,7 @@ export async function onRequestPost(context) {
       } catch (e) {}
     }
 
-    // Check Rate Limiting
-    let failedCount = 0;
-    let oldestAttemptTime = null;
-
-    if (env.DB) {
-      await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
-        .bind(cutoff)
-        .run()
-        .catch(() => {});
-
-      const stats = await env.DB.prepare(
-        'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE (identifier = ? OR identifier = ?) AND attempt_time >= ?'
-      )
-        .bind(cleanEmail, clientIp, cutoff)
-        .first();
-
-      failedCount = Number(stats?.total || 0);
-      oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
-    }
-
-    if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
-      const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
-      const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
-
-      return new Response(
-        JSON.stringify({
-          error: `Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}.`,
-          isRateLimited: true,
-          retryAfterMinutes: minutesRemaining,
-          remainingAttempts: 0
-        }),
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-            'Retry-After': String(Math.ceil(waitRemainingMs / 1000)),
-          },
-        }
-      );
-    }
-
-    // 2. Query user from Cloudflare D1
+    // 1. Fetch user from Cloudflare D1 first so we know permissions before applying limits
     let user = null;
     if (env.DB) {
       // Proactively purge and drop legacy password_plain column if present
@@ -139,6 +112,51 @@ export async function onRequestPost(context) {
       });
       const data = await res.json();
       user = data?.result?.[0]?.results?.[0] || null;
+    }
+
+    const isSuperAdmin = user && (user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com');
+    const isAdmin = user && user.role === 'admin';
+    const isVpnAllowed = isSuperAdmin || isAdmin || (user && Number(user.allow_vpn) === 1);
+
+    // Rate Limiting Check:
+    // Super Admins, Admins, and users with VPN Allowed are NEVER blocked by IP/rate-limit blockers!
+    if (!isVpnAllowed && env.DB) {
+      await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
+        .bind(cutoff)
+        .run()
+        .catch(() => {});
+
+      // Rate limit check strictly on email (never lock out shared VPN public IPs!)
+      const stats = await env.DB.prepare(
+        'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
+      )
+        .bind(cleanEmail, cutoff)
+        .first();
+
+      const failedCount = Number(stats?.total || 0);
+      const oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
+
+      if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+        const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
+        const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
+
+        return new Response(
+          JSON.stringify({
+            error: `Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}`,
+            isRateLimited: true,
+            retryAfterMinutes: minutesRemaining,
+            remainingAttempts: 0
+          }),
+          {
+            status: 429,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+              'Retry-After': String(Math.ceil(waitRemainingMs / 1000)),
+            },
+          }
+        );
+      }
     }
 
     // Check Pakistan-only Geo Restriction (Super Admin & Admin & users with foreign/VPN permission)
@@ -245,43 +263,37 @@ export async function onRequestPost(context) {
       isValid = await verifyPassword(password, user.password_hash);
     }
 
-    // 3. Handle Failed Login (Record attempt & enforce rate limit)
+    // 3. Handle Failed Login (Record attempt & enforce rate limit on email only)
     if (!isValid) {
-      if (env.DB) {
-        // Record failed attempt for both email and client IP
+      if (env.DB && !isVpnAllowed) {
+        // Record failed attempt ONLY for non-exempt users
         await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?)')
           .bind(cleanEmail, now)
           .run()
           .catch(() => {});
-        if (clientIp !== cleanEmail) {
-          await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?)')
-            .bind(clientIp, now)
-            .run()
-            .catch(() => {});
-        }
       }
-
-      const newFailedCount = failedCount + 1;
-      const remaining = Math.max(0, RATE_LIMIT_MAX_ATTEMPTS - newFailedCount);
 
       // 500ms security delay on failed logins to prevent brute-force timing attacks
       await new Promise(r => setTimeout(r, 500));
 
-      const message = remaining === 0
-        ? 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.'
-        : 'Email or Password Are incorrect.';
-
       return new Response(
         JSON.stringify({
-          error: message,
+          error: 'Email or Password Are incorrect',
           isWrongPassword: !!user,
-          isRateLimited: remaining === 0,
         }),
         {
-          status: remaining === 0 ? 429 : 401,
+          status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
+    }
+
+    // Reset failed attempts upon successful authentication
+    if (env.DB) {
+      await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
+        .bind(cleanEmail, clientIp)
+        .run()
+        .catch(() => {});
     }
 
     // Determine client device type from User-Agent
