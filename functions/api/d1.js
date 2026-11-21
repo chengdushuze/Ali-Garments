@@ -1,4 +1,4 @@
-import { verifySessionToken } from './_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest } from './_auth.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -11,10 +11,8 @@ export async function onRequestPost(context) {
   };
 
   try {
-    // 1. Session verification
-    const cookieHeader = request.headers.get('Cookie') || '';
-    const match = cookieHeader.match(/session=([^;]+)/);
-    const token = match ? match[1] : null;
+    // 1. Session verification (Cookie or Bearer token)
+    const token = getSessionTokenFromRequest(request);
     const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
     const session = token ? await verifySessionToken(token, secret) : null;
 

@@ -66,6 +66,31 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupStatus, setBackupStatus] = useState(null);
+  const [lastBackupInfo, setLastBackupInfo] = useState({
+    time: null,
+    details: '',
+    isLoading: false,
+  });
+
+  // Fetch last backup time from API
+  const fetchBackupInfo = async () => {
+    setLastBackupInfo(prev => ({ ...prev, isLoading: true }));
+    try {
+      const res = await apiFetch('/api/admin/backup');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setLastBackupInfo({
+          time: data.lastBackupTime,
+          details: data.details || '',
+          isLoading: false,
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load backup info:', e);
+    } finally {
+      setLastBackupInfo(prev => ({ ...prev, isLoading: false }));
+    }
+  };
 
   // Fetch users when modal opens
   const fetchUsers = async () => {
@@ -102,6 +127,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   useEffect(() => {
     if (isOpen && (currentUser?.role === 'admin' || currentUser?.role === 'super_admin')) {
       fetchUsers();
+      fetchBackupInfo();
       setStatusMessage({ type: '', text: '' });
       setBackupStatus(null);
     }
@@ -361,6 +387,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           text: data.message || 'Nightly backup successfully completed!',
           stats: data.stats,
         });
+        fetchBackupInfo();
       }
     } catch (err) {
       console.error('Backup error:', err);
@@ -866,7 +893,44 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 font-mono">
+              {/* Last Backup Time Card */}
+              <div className="mt-4 p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+                      Last Cloud Backup Time
+                    </span>
+                    <span className="text-sm font-bold font-mono text-emerald-400">
+                      {lastBackupInfo.time
+                        ? new Date(lastBackupInfo.time).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                          })
+                        : 'No backup recorded yet'}
+                    </span>
+                    {lastBackupInfo.details && (
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                        {lastBackupInfo.details}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchBackupInfo}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 border border-slate-700/80 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
+                  title="Check latest backup timestamp"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${lastBackupInfo.isLoading ? 'animate-spin' : ''}`} />
+                  <span>{lastBackupInfo.isLoading ? 'Checking...' : 'Refresh Time'}</span>
+                </button>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 font-mono">
                 <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>Schedule: Daily at 20:00 UTC (1:00 AM Pakistan PKT)</span>
               </div>

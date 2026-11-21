@@ -66,17 +66,32 @@ export async function onRequestGet(context) {
   try {
     let users = [];
     if (env.DB) {
-      // Ensure status column exists in SQLite/D1
+      // Ensure users table and status column exist in SQLite/D1
       try {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            status TEXT DEFAULT 'active',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
       } catch (e) {}
 
-      // Auto-provision Super Admin if missing in D1
-      const hasSuper = await env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ?').bind(SUPER_ADMIN_EMAIL).first();
-      if (!hasSuper) {
+      // Auto-provision or update Super Admin permanently in D1
+      const existingSuper = await env.DB.prepare('SELECT id, role, password_hash FROM users WHERE LOWER(email) = ?').bind(SUPER_ADMIN_EMAIL).first();
+      if (!existingSuper) {
         await env.DB.prepare(
           'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)'
         ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run().catch(() => {});
+      } else if (existingSuper.role !== 'super_admin' || existingSuper.password_hash !== SUPER_ADMIN_HASH) {
+        await env.DB.prepare(
+          'UPDATE users SET role = ?, status = ?, password_hash = ? WHERE LOWER(email) = ?'
+        ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
 
       const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, created_at FROM users ORDER BY created_at DESC').all();

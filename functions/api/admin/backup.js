@@ -7,6 +7,77 @@ async function getAdminSession(request, env) {
   return await verifySessionToken(token, secret);
 }
 
+// GET /api/admin/backup - Retrieve the latest backup status and timestamp
+export async function onRequestGet(context) {
+  const { request, env } = context;
+
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+
+  const session = await getAdminSession(request, env);
+
+  if (!session) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (session.role !== 'admin' && session.role !== 'super_admin') {
+    return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    let lastBackup = null;
+
+    if (env.DB) {
+      try {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            user_email TEXT,
+            action TEXT NOT NULL,
+            details TEXT,
+            ip_address TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+
+        lastBackup = await env.DB.prepare(
+          "SELECT created_at, details FROM audit_logs WHERE action = 'BACKUP_EXECUTED' ORDER BY id DESC LIMIT 1"
+        ).first();
+      } catch (e) {}
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        lastBackupTime: lastBackup?.created_at || null,
+        details: lastBackup?.details || null,
+        targetDatabase: 'ali-graments-backup',
+        schedule: 'Daily at 20:00 UTC (1:00 AM Pakistan PKT)'
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Failed to retrieve backup info' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 // POST /api/admin/backup - Perform complete backup from primary D1 to ali-graments-backup D1
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -213,8 +284,22 @@ export async function onRequestPost(context) {
       JSON.stringify({ error: 'Something went wrong while running backup. Please try again.' }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
       }
     );
   }
+}
+
+export async function onRequestOptions() {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    },
+  });
 }

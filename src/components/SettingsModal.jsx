@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Database,
@@ -13,10 +13,13 @@ import {
   QrCode,
   Key,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Clock,
+  HardDriveDownload
 } from 'lucide-react';
 import { executeD1Query, initD1Tables } from '../services/d1Sync';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
+import { apiFetch } from '../services/apiClient';
 
 export default function SettingsModal({
   isOpen,
@@ -30,6 +33,39 @@ export default function SettingsModal({
   const [activeTab, setActiveTab] = useState('d1'); // 'd1', 'company', 'payments', 'backup'
   const [formData, setFormData] = useState({ ...settings });
   const [testStatus, setTestStatus] = useState(null); // { loading, success, message }
+  const [backupInfo, setBackupInfo] = useState({
+    cloudTime: null,
+    cloudDetails: null,
+    localTime: typeof window !== 'undefined' ? localStorage.getItem('ali_garments_last_backup_time') : null,
+    isLoading: false,
+  });
+
+  const fetchCloudBackupInfo = async () => {
+    setBackupInfo(prev => ({ ...prev, isLoading: true }));
+    try {
+      const res = await apiFetch('/api/admin/backup');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.backup) {
+        setBackupInfo(prev => ({
+          ...prev,
+          cloudTime: data.backup.lastBackupTime || null,
+          cloudDetails: data.backup.details || null,
+          isLoading: false,
+        }));
+      } else {
+        setBackupInfo(prev => ({ ...prev, isLoading: false }));
+      }
+    } catch (e) {
+      console.warn('Could not fetch cloud backup info:', e);
+      setBackupInfo(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'backup') {
+      fetchCloudBackupInfo();
+    }
+  }, [isOpen, activeTab]);
 
   if (!isOpen) return null;
 
@@ -115,6 +151,11 @@ export default function SettingsModal({
     a.download = `ALI_Garments_Backup_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    const nowIso = new Date().toISOString();
+    try {
+      localStorage.setItem('ali_garments_last_backup_time', nowIso);
+    } catch (e) {}
+    setBackupInfo(prev => ({ ...prev, localTime: nowIso }));
   };
 
   // Restore JSON Backup
@@ -562,6 +603,74 @@ export default function SettingsModal({
           {/* TAB 4: BACKUP & EXPORT */}
           {activeTab === 'backup' && (
             <div className="space-y-4 text-xs">
+              {/* Last Backup Time Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 text-white shadow-lg space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-white uppercase tracking-wider">
+                        Backup Status & Timestamps
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Tracks automated Cloud D1 snapshots & manual offline JSON exports
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchCloudBackupInfo}
+                    disabled={backupInfo.isLoading}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 border border-slate-700/80 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${backupInfo.isLoading ? 'animate-spin' : ''}`} />
+                    <span>{backupInfo.isLoading ? 'Checking...' : 'Refresh'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Cloud D1 Backup Status */}
+                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                      ☁️ Cloud D1 Last Backup Time
+                    </span>
+                    <span className="text-xs font-mono font-bold text-emerald-400 block whitespace-nowrap">
+                      {backupInfo.cloudTime
+                        ? new Date(backupInfo.cloudTime).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'No automated snapshot recorded'}
+                    </span>
+                    {backupInfo.cloudDetails && (
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5 truncate">
+                        {backupInfo.cloudDetails}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Local JSON Backup Status */}
+                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                      💾 Local JSON Last Export Time
+                    </span>
+                    <span className="text-xs font-mono font-bold text-teal-300 block whitespace-nowrap">
+                      {backupInfo.localTime
+                        ? new Date(backupInfo.localTime).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'No offline export recorded yet'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Full system state preserved on disk
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* One-Click Excel All Data */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
                 <div>
