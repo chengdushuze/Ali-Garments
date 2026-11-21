@@ -667,14 +667,22 @@ export async function onRequestPatch(context) {
       if (env.DB) {
         try {
           await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run();
+          await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run();
         } catch (e) {}
-        await env.DB.prepare('UPDATE users SET allow_foreign_access = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(foreignVal, id).run();
+        if (foreignVal === 1) {
+          await env.DB.prepare('UPDATE users SET allow_foreign_access = 1, allow_vpn = 1, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(id).run();
+        } else {
+          await env.DB.prepare('UPDATE users SET allow_foreign_access = 0, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(id).run();
+        }
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+        const sql = foreignVal === 1
+          ? 'UPDATE users SET allow_foreign_access = 1, allow_vpn = 1, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?'
+          : 'UPDATE users SET allow_foreign_access = 0, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?';
         await fetch(endpoint, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sql: 'UPDATE users SET allow_foreign_access = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?', params: [foreignVal, id] }),
+          body: JSON.stringify({ sql, params: [id] }),
         });
       }
 
@@ -684,7 +692,8 @@ export async function onRequestPatch(context) {
         JSON.stringify({
           success: true,
           allow_foreign_access: foreignVal,
-          message: `Foreign access (outside Pakistan) for this user is now ${foreignVal ? 'ALLOWED' : 'BLOCKED'}. All active sessions invalidated.`,
+          allow_vpn: foreignVal === 1 ? 1 : undefined,
+          message: `Foreign access (outside Pakistan) for this user is now ${foreignVal ? 'ALLOWED' : 'BLOCKED'} All active sessions invalidated`,
         }),
         {
           status: 200,

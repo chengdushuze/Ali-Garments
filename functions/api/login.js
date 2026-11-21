@@ -1,7 +1,5 @@
 import { verifyPassword, signSessionToken, getSessionSecret, getCorsHeaders, isVpnOrProxy } from './_auth.js';
 
-const RATE_LIMIT_MAX_ATTEMPTS = 3;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
 const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
 
 // GET /api/login - Prohibit auto-seeding over public HTTP; return 405 Method Not Allowed
@@ -9,7 +7,7 @@ export async function onRequestGet(context) {
   const { request } = context;
   const corsHeaders = getCorsHeaders(request);
   return new Response(JSON.stringify({ 
-    error: 'Method Not Allowed. Super admin seeding is restricted to CLI scripts (scripts/seed-super-admin.js).' 
+    error: 'Method Not Allowed' 
   }), {
     status: 405,
     headers: {
@@ -30,6 +28,15 @@ export async function onRequestPost(context) {
     try { await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run(); } catch (e) {}
     try { await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run(); } catch (e) {}
     try { await env.DB.prepare('ALTER TABLE users ADD COLUMN suspended_until INTEGER').run(); } catch (e) {}
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN suspension_reason TEXT').run(); } catch (e) {}
+
+    // Ensure admins and super admins always have VPN and foreign access enabled
+    await env.DB.prepare(
+      "UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role IN ('super_admin', 'admin') OR LOWER(email) IN ('admin@chengdushuze.com', 'admin@aligarments.com')"
+    ).run().catch(() => {});
+
+    // Proactively clear any legacy login attempt lockouts so users are never blocked
+    await env.DB.prepare('DELETE FROM login_attempts').run().catch(() => {});
   }
 
   try {
@@ -42,7 +49,7 @@ export async function onRequestPost(context) {
                      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
                      'client';
 
-    // Handle immediate lock reset request
+    // Handle immediate lock reset request if called
     if (resetLock && cleanEmail) {
       if (env.DB) {
         await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
@@ -64,25 +71,12 @@ export async function onRequestPost(context) {
       });
     }
 
-    const now = Date.now();
-    const cutoff = now - RATE_LIMIT_WINDOW_MS;
-
-    // Auto-create rate limiting table in D1 if not exists
-    if (env.DB) {
-      try {
-        await env.DB.prepare(
-          'CREATE TABLE IF NOT EXISTS login_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, identifier TEXT NOT NULL, attempt_time INTEGER NOT NULL)'
-        ).run();
-      } catch (e) {}
-    }
-
-    // 1. Fetch user from Cloudflare D1 first so we know permissions before applying limits
+    // 1. Fetch user from Cloudflare D1
     let user = null;
     if (env.DB) {
       // Proactively purge and drop legacy password_plain column if present
       await env.DB.prepare('UPDATE users SET password_plain = NULL WHERE password_plain IS NOT NULL').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE users DROP COLUMN password_plain').run().catch(() => {});
-      await env.DB.prepare('ALTER TABLE users ADD COLUMN suspension_reason TEXT').run().catch(() => {});
 
       user = await env.DB.prepare(
         `SELECT id, name, email, password_hash, role, status, suspended_until, suspension_reason, 
@@ -114,124 +108,30 @@ export async function onRequestPost(context) {
       user = data?.result?.[0]?.results?.[0] || null;
     }
 
-    const isSuperAdmin = user && (user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com');
-    const isAdmin = user && user.role === 'admin';
-    const isVpnAllowed = isSuperAdmin || isAdmin || (user && Number(user.allow_vpn) === 1);
-
-    // Rate Limiting Check:
-    // Super Admins, Admins, and users with VPN Allowed are NEVER blocked by IP/rate-limit blockers!
-    if (!isVpnAllowed && env.DB) {
-      await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
-        .bind(cutoff)
-        .run()
-        .catch(() => {});
-
-      // Rate limit check strictly on email (never lock out shared VPN public IPs!)
-      const stats = await env.DB.prepare(
-        'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
-      )
-        .bind(cleanEmail, cutoff)
-        .first();
-
-      const failedCount = Number(stats?.total || 0);
-      const oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
-
-      if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
-        const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
-        const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
-
-        return new Response(
-          JSON.stringify({
-            error: `Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}`,
-            isRateLimited: true,
-            retryAfterMinutes: minutesRemaining,
-            remainingAttempts: 0
-          }),
-          {
-            status: 429,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-              'Retry-After': String(Math.ceil(waitRemainingMs / 1000)),
-            },
-          }
-        );
-      }
+    // 2. Password verification via cryptographic PBKDF2 hash
+    let isValid = false;
+    if (user && user.password_hash) {
+      isValid = await verifyPassword(password, user.password_hash);
     }
 
-    // Check Pakistan-only Geo Restriction (Super Admin & Admin & users with foreign/VPN permission)
-    const clientCountry = request.cf?.country; // Undefined in local dev / native requests
-    const isSuperAdmin = user && (user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com');
-    const isAdmin = user && user.role === 'admin';
-    
-    if (clientCountry && clientCountry !== 'PK') {
-      const hasForeignAccess = isSuperAdmin || isAdmin || (user && (Number(user.allow_foreign_access) === 1 || Number(user.allow_vpn) === 1));
-      if (!hasForeignAccess) {
-        if (env.DB) {
-          try {
-            await env.DB.prepare(
-              'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
-            ).bind(
-              user?.id || null,
-              cleanEmail,
-              'GEO_BLOCKED',
-              `Login blocked: Access from country '${clientCountry}' denied (User lacks foreign access or VPN permission).`,
-              clientIp
-            ).run();
-          } catch (e) {}
+    // If invalid credentials or user not found, return exact requested message with NO dot
+    if (!user || !isValid) {
+      await new Promise(r => setTimeout(r, 500));
+      return new Response(
+        JSON.stringify({
+          error: 'Email or Password Are incorrect',
+          isWrongPassword: true,
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
-
-        return new Response(
-          JSON.stringify({
-            error: `Access restricted to Pakistan (PK). Your detected location is ${clientCountry}. Please contact Super Admin for foreign access authorization.`,
-            code: 'GEO_BLOCKED',
-            isGeoBlocked: true,
-            country: clientCountry
-          }),
-          {
-            status: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
+      );
     }
 
-    // Check Strict VPN / Proxy Policy (Super Admin & Admin & users with allow_vpn = 1)
-    if (isVpnOrProxy(request)) {
-      const isVpnAllowed = isSuperAdmin || isAdmin || (user && Number(user.allow_vpn) === 1);
-      if (!user || !isVpnAllowed) {
-        if (env.DB) {
-          try {
-            await env.DB.prepare(
-              'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
-            ).bind(
-              user?.id || null,
-              cleanEmail,
-              'VPN_BLOCKED',
-              `Login blocked: Access via VPN or proxy denied without admin authorization.`,
-              clientIp
-            ).run();
-          } catch (e) {}
-        }
-
-        return new Response(
-          JSON.stringify({
-            error: 'VPN or Proxy connection detected. Security policy requires Administrator authorization to access ALI Garments through a VPN or Proxy. Please disable your VPN or contact your administrator.',
-            code: 'VPN_BLOCKED',
-            isVpnBlocked: true
-          }),
-          {
-            status: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-    }
-
-    // Check if user is suspended (Super Admin is NEVER suspended)
-    if (user && user.status === 'suspended' && user.role !== 'super_admin') {
+    // 3. User Suspension Check (Super Admin is NEVER suspended)
+    if (user.status === 'suspended' && user.role !== 'super_admin') {
       if (user.suspended_until && Date.now() >= user.suspended_until) {
-        // Auto-reactivate expired suspension
         if (env.DB) {
           await env.DB.prepare("UPDATE users SET status = 'active', suspended_until = NULL WHERE id = ?").bind(user.id).run().catch(() => {});
         }
@@ -239,11 +139,11 @@ export async function onRequestPost(context) {
       } else {
         const remainingDays = user.suspended_until ? Math.ceil((user.suspended_until - Date.now()) / (24 * 60 * 60 * 1000)) : null;
         const untilMsg = remainingDays ? ` for ${remainingDays} more day(s)` : '';
-        const defaultReason = 'We suspected unusual activity on your account.';
-        const reason = user.suspension_reason?.trim() || defaultReason;
+        const defaultReason = 'We suspected unusual activity on your account';
+        const reason = (user.suspension_reason?.trim() || defaultReason).replace(/\./g, '');
         return new Response(
           JSON.stringify({
-            error: `Your account has been temporarily suspended by an administrator${untilMsg}.\nReason: ${reason}`,
+            error: `Your account has been temporarily suspended by an administrator${untilMsg}\nReason: ${reason}`,
             isSuspended: true,
             reason: reason,
             suspendedDays: remainingDays,
@@ -257,38 +157,72 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Password verification via cryptographic PBKDF2 hash
-    let isValid = false;
-    if (user && user.password_hash) {
-      isValid = await verifyPassword(password, user.password_hash);
-    }
+    // 4. VPN and Foreign Geo-Policy Validation
+    const isSuperAdmin = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com' || user.email?.toLowerCase() === 'admin@aligarments.com';
+    const isAdmin = user.role === 'admin';
+    const isVpnAllowed = isSuperAdmin || isAdmin || Number(user.allow_vpn) === 1 || Number(user.allow_foreign_access) === 1;
 
-    // 3. Handle Failed Login (Record attempt & enforce rate limit on email only)
-    if (!isValid) {
-      if (env.DB && !isVpnAllowed) {
-        // Record failed attempt ONLY for non-exempt users
-        await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?)')
-          .bind(cleanEmail, now)
-          .run()
-          .catch(() => {});
+    // Check Pakistan-only Geo Restriction
+    const clientCountry = request.cf?.country; // Undefined in local dev / native WebView
+    if (clientCountry && clientCountry !== 'PK' && !isVpnAllowed) {
+      if (env.DB) {
+        try {
+          await env.DB.prepare(
+            'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+          ).bind(
+            user.id,
+            cleanEmail,
+            'GEO_BLOCKED',
+            `Login blocked: Access from country '${clientCountry}' denied (User lacks foreign access or VPN permission)`,
+            clientIp
+          ).run();
+        } catch (e) {}
       }
-
-      // 500ms security delay on failed logins to prevent brute-force timing attacks
-      await new Promise(r => setTimeout(r, 500));
 
       return new Response(
         JSON.stringify({
-          error: 'Email or Password Are incorrect',
-          isWrongPassword: !!user,
+          error: `Access restricted to Pakistan (PK) Your detected location is ${clientCountry} Please contact Super Admin for foreign access authorization`,
+          code: 'GEO_BLOCKED',
+          isGeoBlocked: true,
+          country: clientCountry
         }),
         {
-          status: 401,
+          status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
-    // Reset failed attempts upon successful authentication
+    // Check Strict VPN / Proxy Policy
+    if (isVpnOrProxy(request) && !isVpnAllowed) {
+      if (env.DB) {
+        try {
+          await env.DB.prepare(
+            'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+          ).bind(
+            user.id,
+            cleanEmail,
+            'VPN_BLOCKED',
+            `Login blocked: Access via VPN or proxy denied without admin authorization`,
+            clientIp
+          ).run();
+        } catch (e) {}
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: 'VPN or Proxy connection detected Security policy requires Administrator authorization to access ALI Garments through a VPN or Proxy Please disable your VPN or contact your administrator',
+          code: 'VPN_BLOCKED',
+          isVpnBlocked: true
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // 5. Successful Login: Clear any failed attempts
     if (env.DB) {
       await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
         .bind(cleanEmail, clientIp)
@@ -313,14 +247,7 @@ export async function onRequestPost(context) {
       deviceType = 'Linux';
     }
 
-    // 4. Successful Login: Clear all failed attempts for this email and IP
     if (env.DB) {
-      await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
-        .bind(cleanEmail, clientIp)
-        .run()
-        .catch(() => {});
-
-      // Record audit log and update last login IP & device info
       try {
         await env.DB.prepare(
           'CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_email TEXT, action TEXT NOT NULL, details TEXT, ip_address TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
@@ -340,19 +267,19 @@ export async function onRequestPost(context) {
       } catch (e) {}
     }
 
-    // 5. Sign session token with SESSION_SECRET (Strict 5-Day Expiration for Security)
+    // 6. Sign session token with SESSION_SECRET (5-Day Expiration)
     const secret = getSessionSecret(env);
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
     const FIVE_DAYS_SECONDS = 5 * 24 * 60 * 60; // 432,000 seconds
 
-    const isSuper = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com';
+    const isSuper = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com' || user.email?.toLowerCase() === 'admin@aligarments.com';
     const sessionPayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role || 'user',
-      allow_vpn: isSuper ? 1 : (user.allow_vpn || 0),
-      allow_foreign_access: isSuper ? 1 : (user.allow_foreign_access || 0),
+      allow_vpn: isVpnAllowed ? 1 : 0,
+      allow_foreign_access: isVpnAllowed ? 1 : 0,
       ver: user.token_version || 1,
       exp: Date.now() + FIVE_DAYS_MS,
     };
@@ -371,8 +298,8 @@ export async function onRequestPost(context) {
           name: user.name,
           email: user.email,
           role: user.role || 'user',
-          allow_vpn: isSuper ? 1 : (user.allow_vpn || 0),
-          allow_foreign_access: isSuper ? 1 : (user.allow_foreign_access || 0),
+          allow_vpn: isVpnAllowed ? 1 : 0,
+          allow_foreign_access: isVpnAllowed ? 1 : 0,
           is_super_admin: isSuper,
         },
       }),
@@ -387,7 +314,7 @@ export async function onRequestPost(context) {
     );
   } catch (error) {
     console.error('Login technical error:', error);
-    return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
+    return new Response(JSON.stringify({ error: 'Something went wrong Please try again' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

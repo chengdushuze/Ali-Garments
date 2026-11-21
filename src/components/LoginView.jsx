@@ -1,39 +1,7 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, Sparkles, RefreshCw } from 'lucide-react';
+import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { getCachedAuthUser, setCachedAuthUser } from '../services/storage';
 import { apiFetch, setStoredToken } from '../services/apiClient';
-
-const RATE_LIMIT_MAX_ATTEMPTS = 3;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
-function getOfflineAttempts() {
-  try {
-    const raw = localStorage.getItem('ag_login_attempts');
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
-    return Array.isArray(parsed) ? parsed.filter(t => typeof t === 'number' && t > cutoff) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function recordOfflineFailedAttempt() {
-  try {
-    const attempts = getOfflineAttempts();
-    attempts.push(Date.now());
-    localStorage.setItem('ag_login_attempts', JSON.stringify(attempts));
-    return attempts.length;
-  } catch (e) {
-    return 1;
-  }
-}
-
-function clearOfflineAttempts() {
-  try {
-    localStorage.removeItem('ag_login_attempts');
-  } catch (e) {}
-}
 
 export default function LoginView({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -41,20 +9,6 @@ export default function LoginView({ onLoginSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  const handleResetLock = async () => {
-    clearOfflineAttempts();
-    setErrorMessage('');
-    if (email) {
-      try {
-        await apiFetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim().toLowerCase(), resetLock: true }),
-        });
-      } catch (e) {}
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,7 +43,6 @@ export default function LoginView({ onLoginSuccess }) {
       if (response) {
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success && data.user) {
-          clearOfflineAttempts();
           if (data.token) {
             setStoredToken(data.token);
           }
@@ -99,22 +52,17 @@ export default function LoginView({ onLoginSuccess }) {
           }
           return;
         } else {
-          // If 403 Suspended
-          if (response.status === 403 || data.isSuspended) {
-            setErrorMessage((data.error || 'Your account has been temporarily suspended by an administrator').replace(/\.+$/, ''));
-            setIsLoading(false);
-            return;
-          }
-
-          // If 429 Rate limited
-          if (response.status === 429 || data.isRateLimited) {
-            setErrorMessage((data.error || 'Too many failed login attempts (3 maximum)').replace(/\.+$/, ''));
+          // If 403 Suspended or Geo/VPN
+          if (data.isSuspended || response.status === 403) {
+            const rawMsg = data.error || 'Your account has been temporarily suspended by an administrator';
+            setErrorMessage(rawMsg.replace(/\./g, ''));
             setIsLoading(false);
             return;
           }
 
           // Failed credentials (401 or other)
-          setErrorMessage((data.error || 'Email or Password Are incorrect').replace(/\.+$/, ''));
+          const rawMsg = data.error || 'Email or Password Are incorrect';
+          setErrorMessage(rawMsg.replace(/\./g, ''));
           setIsLoading(false);
           return;
         }
@@ -124,20 +72,19 @@ export default function LoginView({ onLoginSuccess }) {
       const cached = await getCachedAuthUser();
       if (cached && cached.email?.toLowerCase() === cleanEmail) {
         if (cached.status === 'suspended' && cached.role !== 'super_admin') {
-          setErrorMessage('Your account has been temporarily suspended by an administrator.');
+          setErrorMessage('Your account has been temporarily suspended by an administrator');
           setIsLoading(false);
           return;
         }
-        clearOfflineAttempts();
         if (onLoginSuccess) onLoginSuccess(cached);
         return;
       }
 
       // If server could not be reached and no offline cached session exists
-      setErrorMessage('Cannot reach the authentication server. Please check your internet connection.');
+      setErrorMessage('Cannot reach the authentication server Please check your internet connection');
     } catch (err) {
       console.error('Login request failed:', err);
-      setErrorMessage('Something went wrong. Please check your connection and try again.');
+      setErrorMessage('Something went wrong Please check your connection and try again');
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +92,7 @@ export default function LoginView({ onLoginSuccess }) {
 
   return (
     <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-3 sm:p-6 select-none pt-safe pb-safe">
-      {/* Top Bar with System Badge (Safe area padded for Android status bar and notches) */}
+      {/* Top Bar with System Badge */}
       <div className="w-full flex justify-between items-center max-w-sm sm:max-w-md mx-auto pt-8 sm:pt-4 px-2 shrink-0">
         <div className="flex items-center gap-2">
           <img
@@ -163,7 +110,7 @@ export default function LoginView({ onLoginSuccess }) {
         </div>
       </div>
 
-      {/* Login Card (Fits 100% On Screen Without Scrolling) */}
+      {/* Login Card */}
       <div className="w-full max-w-sm sm:max-w-md mx-auto my-auto py-1">
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl shadow-black/60">
           {/* Header with Custom Rana ALI Garments Logo */}
@@ -179,7 +126,7 @@ export default function LoginView({ onLoginSuccess }) {
               Sign In to Your Khata
             </h2>
             <p className="text-slate-400 text-[11px] sm:text-xs mt-0.5">
-              Authorized personnel only. Closed multi-user portal.
+              Authorized personnel only Closed multi-user portal
             </p>
           </div>
 
@@ -188,16 +135,7 @@ export default function LoginView({ onLoginSuccess }) {
             <div className="mb-3 p-2.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 font-medium leading-tight whitespace-pre-line">
-                {(errorMessage || '').replace(/\.+$/, '')}
-                {errorMessage.includes('locked') && (
-                  <button
-                    type="button"
-                    onClick={handleResetLock}
-                    className="block mt-1.5 text-[11px] text-emerald-400 underline hover:text-emerald-300 font-semibold cursor-pointer"
-                  >
-                    Reset attempt lock (Unlock now)
-                  </button>
-                )}
+                {(errorMessage || '').replace(/\./g, '')}
                 {errorMessage.includes('VPN') && (
                   <button
                     type="button"
@@ -273,7 +211,7 @@ export default function LoginView({ onLoginSuccess }) {
               {isLoading ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span className="whitespace-nowrap">Verifying Credentials...</span>
+                  <span className="whitespace-nowrap">Verifying Credentials</span>
                 </>
               ) : (
                 <>
@@ -287,7 +225,7 @@ export default function LoginView({ onLoginSuccess }) {
           {/* Closed Registration Notice */}
           <div className="mt-3.5 pt-3 border-t border-slate-800 text-center">
             <p className="text-[11px] text-slate-400 leading-tight">
-              Administrative portal. Public registration permanently disabled for system security.
+              Administrative portal Public registration permanently disabled for system security
             </p>
           </div>
         </div>

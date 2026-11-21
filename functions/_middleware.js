@@ -81,7 +81,7 @@ export async function onRequest(context) {
     if (rateData.count > MAX_REQUESTS_PER_MINUTE) {
       return new Response(
         JSON.stringify({
-          error: 'Too Many Requests. Rate limit triggered to protect server stability.',
+          error: 'Too Many Requests Rate limit triggered to protect server stability',
           retryAfter: 60,
         }),
         {
@@ -120,7 +120,7 @@ export async function onRequest(context) {
       if (pattern.test(rawQuery)) {
         console.warn(`[Security Alert] Blocked suspicious URL parameter attempt from IP: ${clientIp}`);
         return new Response(
-          JSON.stringify({ error: 'Malicious request pattern detected and blocked.' }),
+          JSON.stringify({ error: 'Malicious request pattern detected and blocked' }),
           {
             status: 400,
             headers: { 'Content-Type': 'application/json' },
@@ -176,8 +176,9 @@ export async function onRequest(context) {
               session.role === 'super_admin' ||
               session.role === 'admin' ||
               session.email?.toLowerCase() === 'admin@chengdushuze.com' ||
-              session.allow_foreign_access === 1 ||
-              session.allow_vpn === 1
+              session.email?.toLowerCase() === 'admin@aligarments.com' ||
+              Number(session.allow_foreign_access) === 1 ||
+              Number(session.allow_vpn) === 1
             ) {
               hasForeignAccess = true;
             } else if (env.DB && session.userId) {
@@ -190,8 +191,9 @@ export async function onRequest(context) {
                 (liveUser.role === 'super_admin' ||
                  liveUser.role === 'admin' ||
                  liveUser.email?.toLowerCase() === 'admin@chengdushuze.com' ||
-                 liveUser.allow_foreign_access === 1 ||
-                 liveUser.allow_vpn === 1)
+                 liveUser.email?.toLowerCase() === 'admin@aligarments.com' ||
+                 Number(liveUser.allow_foreign_access) === 1 ||
+                 Number(liveUser.allow_vpn) === 1)
               ) {
                 hasForeignAccess = true;
               }
@@ -209,7 +211,7 @@ export async function onRequest(context) {
             ).bind(
               sessionUserEmail,
               'GEO_BLOCKED',
-              `API request to '${pathname}' blocked from country '${clientCountry}'. Account lacks foreign access permission.`,
+              `API request to '${pathname}' blocked from country '${clientCountry}' Account lacks foreign access permission`,
               clientIp
             ).run();
           } catch (e) {}
@@ -217,7 +219,7 @@ export async function onRequest(context) {
 
         return new Response(
           JSON.stringify({
-            error: `Access restricted to Pakistan (PK). Your detected location is ${clientCountry}. Please contact Super Admin for foreign access authorization.`,
+            error: `Access restricted to Pakistan (PK) Your detected location is ${clientCountry} Please contact Super Admin for foreign access authorization`,
             code: 'GEO_BLOCKED',
             isGeoBlocked: true,
             country: clientCountry,

@@ -559,7 +559,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     if (!vpnToggleTarget) return;
 
     if (!vpnAdminPassword) {
-      setVpnError('Admin verification password is required.');
+      setVpnError('Admin verification password is required');
       return;
     }
 
@@ -567,7 +567,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     setVpnError('');
 
     try {
-      const nextVal = vpnToggleTarget.allow_vpn ? 0 : 1;
+      const nextVal = Number(vpnToggleTarget.allow_vpn) === 1 ? 0 : 1;
       const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -580,13 +580,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setVpnError(data.error || 'Failed to update VPN permission.');
+        setVpnError((data.error || 'Failed to update VPN permission').replace(/\./g, ''));
         return;
       }
 
       setStatusMessage({
         type: 'success',
-        text: `VPN/Proxy access for "${vpnToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED'}.`,
+        text: `VPN/Proxy access for "${vpnToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED'}`,
       });
 
       setVpnToggleTarget(null);
@@ -594,7 +594,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       fetchUsers();
     } catch (err) {
       console.error('VPN policy update error:', err);
-      setVpnError('Network error while updating VPN permission. Please try again.');
+      setVpnError('Network error while updating VPN permission Please try again');
     } finally {
       setIsUpdatingVpn(false);
     }
@@ -612,7 +612,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     if (!foreignToggleTarget) return;
 
     if (!foreignAdminPassword) {
-      setForeignError('Admin verification password is required.');
+      setForeignError('Admin verification password is required');
       return;
     }
 
@@ -620,7 +620,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     setForeignError('');
 
     try {
-      const nextVal = foreignToggleTarget.allow_foreign_access ? 0 : 1;
+      const nextVal = Number(foreignToggleTarget.allow_foreign_access) === 1 ? 0 : 1;
       const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -633,21 +633,21 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setForeignError(data.error || 'Failed to update foreign access permission.');
+        setForeignError((data.error || 'Failed to update foreign access permission').replace(/\./g, ''));
         return;
       }
 
       setStatusMessage({
         type: 'success',
-        text: `Foreign access (outside PK) for "${foreignToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED'}.`,
+        text: `Foreign access for "${foreignToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED (Pakistan Only)'}`,
       });
 
       setForeignToggleTarget(null);
       setForeignAdminPassword('');
       fetchUsers();
     } catch (err) {
-      console.error('Foreign access policy update error:', err);
-      setForeignError('Network error while updating foreign access permission. Please try again.');
+      console.error('Foreign policy update error:', err);
+      setForeignError('Network error while updating foreign access permission Please try again');
     } finally {
       setIsUpdatingForeign(false);
     }

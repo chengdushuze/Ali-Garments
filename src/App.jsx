@@ -213,24 +213,24 @@ export default function App() {
     if (data.isSuspended) {
       title = 'Account Suspended • کھاتہ معطل کر دیا گیا ہے';
       const daysText = data.suspendedDays ? ` for ${data.suspendedDays} day(s)` : '';
-      const reasonText = data.reason || 'We suspected unusual activity on your account.';
-      message = `Your account has been temporarily suspended by an administrator${daysText}.\nReason: ${reasonText}`;
+      const reasonText = (data.reason || 'We suspected unusual activity on your account').replace(/\./g, '');
+      message = `Your account has been temporarily suspended by an administrator${daysText}\nReason: ${reasonText}`;
       type = 'suspended';
     } else if (data.isDeleted) {
       title = 'Account Removed • اکاؤنٹ ختم کر دیا گیا ہے';
-      message = 'Your user account has been removed by an administrator. Please contact management.';
+      message = 'Your user account has been removed by an administrator Please contact management';
       type = 'deleted';
     } else if (data.isVpnBlocked) {
       title = 'VPN / Proxy Detected • وی پی این یا پراکسی بلاک ہے';
-      message = 'VPN or Proxy connection detected. Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel. Please disable your VPN or contact your administrator.';
+      message = 'VPN or Proxy connection detected Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel Please disable your VPN or contact your administrator';
       type = 'vpn';
     } else if (data.isGeoBlocked || data.code === 'GEO_BLOCKED') {
       title = 'Access Restricted to Pakistan • صرف پاکستان کیلئے محدود';
-      message = data.error || 'Access to ALI Garments is restricted to users located within Pakistan. If you require access from outside Pakistan, please contact the Super Admin to enable foreign access for your account.';
+      message = (data.error || 'Access to ALI Garments is restricted to users located within Pakistan If you require access from outside Pakistan please contact the Super Admin to enable foreign access for your account').replace(/\./g, '');
       type = 'geo';
     } else if (data.isLoggedOut) {
       title = 'Session Terminated • سیشن ختم کر دیا گیا ہے';
-      message = 'Your active session has been revoked by an administrative action. Please sign in again.';
+      message = 'Your active session has been revoked by an administrative action Please sign in again';
       type = 'revoked';
     }
 
