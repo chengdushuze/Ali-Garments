@@ -16,6 +16,7 @@ import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
 import PhoneBottomNav from './components/PhoneBottomNav';
 import AppLockScreen from './components/AppLockScreen';
+import { LogOut } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 import {
   getSettings,
@@ -222,6 +223,9 @@ export default function App() {
     isPermanent: false,
     onConfirm: () => {}
   });
+
+  // Logout Consent Modal state (Website own popup - Zero Chrome popups)
+  const [isLogoutConsentOpen, setIsLogoutConsentOpen] = useState(false);
 
   // Load Initial Data from Cache
   useEffect(() => {
@@ -773,7 +777,7 @@ export default function App() {
         settings={settings}
         currentUser={currentUser}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
-        onLogout={handleLogout}
+        onLogout={() => setIsLogoutConsentOpen(true)}
       />
 
       {/* Offline Mode Banner */}
@@ -958,7 +962,56 @@ export default function App() {
         }}
       />
 
-      {/* 9. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
+      {/* 9. Logout Confirmation Consent Modal (Website own popup - Zero Chrome popups) */}
+      {isLogoutConsentOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 mx-auto flex items-center justify-center shadow-lg shadow-rose-950/40">
+              <LogOut className="w-7 h-7" />
+            </div>
+
+            <div>
+              <h4 className="font-bold text-white text-base">
+                Confirm Sign Out • لاگ آؤٹ کی تصدیق
+              </h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Are you sure you want to sign out of <strong className="text-slate-200">{currentUser?.email}</strong>?
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs space-y-1">
+              <p className="font-semibold text-amber-400 flex items-center gap-1">
+                <span>🔒 Local Device Security Protection</span>
+              </p>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                All offline ledgers and cached data on this device will be securely wiped. Your records remain safe in Cloudflare D1 and will reload when you sign in again.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsLogoutConsentOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Stay Signed In
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsLogoutConsentOpen(false);
+                  await handleLogout();
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-950/50 transition-all cursor-pointer"
+              >
+                Yes, Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
       <AppLockScreen
         isLocked={isAppLocked}
         onUnlock={() => {

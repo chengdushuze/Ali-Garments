@@ -180,15 +180,16 @@ export default function CustomerList({
                 <div className="flex items-center gap-2 text-right flex-shrink-0">
                   <div>
                     <div
-                      className={`text-sm font-bold font-mono tabular-nums ${
+                      className={`text-sm font-bold font-mono tabular-nums whitespace-nowrap ${
                         bal > 0
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : bal < 0
                           ? 'text-rose-600 dark:text-rose-400'
                           : 'text-slate-500'
                       }`}
+                      style={{ whiteSpace: 'nowrap' }}
                     >
-                      {currency} {Math.abs(bal).toLocaleString()}
+                      {currency}&nbsp;{Math.abs(bal).toLocaleString()}
                     </div>
                     <span
                       className={`text-[10px] font-medium block ${

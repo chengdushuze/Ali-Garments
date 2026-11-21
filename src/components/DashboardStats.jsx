@@ -65,12 +65,12 @@ export default function DashboardStats({
           </div>
           <div className="mt-3">
             <div
-              className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-x-auto no-scrollbar max-w-full"
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap' }}
+              className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${currency} ${totalReceivable.toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">{currency}</span>
-              <span className="text-lg sm:text-xl lg:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalReceivable.toLocaleString()}</span>
+              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalReceivable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               From {customers.filter(c => (c.balance || 0) > 0).length} customers
@@ -91,12 +91,12 @@ export default function DashboardStats({
           </div>
           <div className="mt-3">
             <div
-              className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-x-auto no-scrollbar max-w-full"
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap' }}
+              className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${currency} ${totalPayable.toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">{currency}</span>
-              <span className="text-lg sm:text-xl lg:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalPayable.toLocaleString()}</span>
+              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalPayable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               To {customers.filter(c => (c.balance || 0) < 0).length} suppliers/accounts
@@ -116,16 +116,16 @@ export default function DashboardStats({
           </div>
           <div className="mt-3">
             <div
-              className={`flex items-baseline flex-nowrap gap-1.5 font-bold font-mono tabular-nums whitespace-nowrap leading-none tracking-tight overflow-x-auto no-scrollbar max-w-full ${
+              className={`flex items-baseline flex-nowrap gap-1.5 font-bold font-mono tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full ${
                 netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
               }`}
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap' }}
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${netBalance < 0 ? '-' : '+'} ${currency} ${Math.abs(netBalance).toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">
                 {netBalance < 0 ? '-' : '+'} {currency}
               </span>
-              <span className="text-lg sm:text-xl lg:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">
+              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">
                 {Math.abs(netBalance).toLocaleString()}
               </span>
             </div>

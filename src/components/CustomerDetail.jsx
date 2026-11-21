@@ -159,15 +159,16 @@ export default function CustomerDetail({
               {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Balance'}
             </span>
             <div
-              className={`text-xl sm:text-2xl font-black font-mono tabular-nums ${
+              className={`text-xl sm:text-2xl font-black font-mono tabular-nums whitespace-nowrap ${
                 bal > 0
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : bal < 0
                   ? 'text-rose-600 dark:text-rose-400'
                   : 'text-slate-600 dark:text-slate-300'
               }`}
+              style={{ whiteSpace: 'nowrap' }}
             >
-              {currency} {Math.abs(bal).toLocaleString()}
+              {currency}&nbsp;{Math.abs(bal).toLocaleString()}
             </div>
           </div>
         </div>
@@ -354,17 +355,18 @@ export default function CustomerDetail({
                 <div className="flex items-center gap-3 text-right flex-shrink-0">
                   <div>
                     <div
-                      className={`text-base font-bold font-mono tabular-nums ${
+                      className={`text-base font-bold font-mono tabular-nums whitespace-nowrap ${
                         isDebit
                           ? 'text-rose-600 dark:text-rose-400'
                           : 'text-emerald-600 dark:text-emerald-400'
                       }`}
+                      style={{ whiteSpace: 'nowrap' }}
                     >
-                      {isDebit ? '+' : '-'} {currency} {Number(tx.amount || 0).toLocaleString()}
+                      {isDebit ? '+' : '-'} {currency}&nbsp;{Number(tx.amount || 0).toLocaleString()}
                     </div>
                     {tx.balanceAfter !== undefined && (
-                      <span className="text-[10px] text-slate-400 block font-mono">
-                        Bal: {currency} {Number(tx.balanceAfter).toLocaleString()}
+                      <span className="text-[10px] text-slate-400 block font-mono whitespace-nowrap" style={{ whiteSpace: 'nowrap' }}>
+                        Bal: {currency}&nbsp;{Number(tx.balanceAfter).toLocaleString()}
                       </span>
                     )}
                   </div>

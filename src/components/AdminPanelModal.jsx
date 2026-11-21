@@ -94,6 +94,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
   const [auditSearch, setAuditSearch] = useState('');
 
+  // Super Admin Clear Audit Trails State (Website own popup - Zero Chrome popups)
+  const [showClearAuditModal, setShowClearAuditModal] = useState(false);
+  const [clearAuditPassword, setClearAuditPassword] = useState('');
+  const [showClearAuditPassword, setShowClearAuditPassword] = useState(false);
+  const [isClearingAudit, setIsClearingAudit] = useState(false);
+  const [clearAuditError, setClearAuditError] = useState('');
+
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupStatus, setBackupStatus] = useState(null);
@@ -586,6 +593,47 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       });
     } finally {
       setIsBackingUp(false);
+    }
+  };
+
+  // 7. Super Admin Clear All Audit Trails Handler
+  const handleConfirmClearAudit = async (e) => {
+    e.preventDefault();
+    if (!clearAuditPassword) {
+      setClearAuditError('Please enter your Super Admin password to authorize audit purge.');
+      return;
+    }
+
+    setIsClearingAudit(true);
+    setClearAuditError('');
+
+    try {
+      const res = await apiFetch('/api/admin/audit', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          superAdminPassword: clearAuditPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setClearAuditError(data.error || 'Failed to clear audit trails.');
+        return;
+      }
+
+      setStatusMessage({
+        type: 'success',
+        text: 'All activity audit trails have been permanently purged by Super Admin.',
+      });
+      setShowClearAuditModal(false);
+      setClearAuditPassword('');
+      fetchAuditLogs();
+    } catch (err) {
+      console.error('Purge audit error:', err);
+      setClearAuditError('Network error while purging audit logs.');
+    } finally {
+      setIsClearingAudit(false);
     }
   };
 
@@ -1100,15 +1148,35 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     <p className="text-[11px] text-slate-400">Tracks logins, password changes, account suspensions, and backups</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={fetchAuditLogs}
-                  disabled={isLoadingAudit}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto whitespace-nowrap"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAudit ? 'animate-spin' : ''}`} />
-                  <span className="whitespace-nowrap">Refresh Logs</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={fetchAuditLogs}
+                    disabled={isLoadingAudit}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAudit ? 'animate-spin' : ''}`} />
+                    <span className="whitespace-nowrap">Refresh Logs</span>
+                  </button>
+
+                  {/* Super Admin Only: Clear Audit Trails */}
+                  {currentUser?.role === 'super_admin' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowClearAuditModal(true);
+                        setClearAuditPassword('');
+                        setClearAuditError('');
+                        setShowClearAuditPassword(false);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-xs text-rose-300 border border-rose-800/60 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap font-semibold active:scale-95 shadow-sm"
+                      title="Permanently remove all activity audit records (Super Admin Only)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span className="whitespace-nowrap">Clear Audit Trails</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Search Filter */}
@@ -1955,6 +2023,115 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       <>
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Confirm & Delete User</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Website Own Popup: Clear Audit Trails Modal (Super Admin Only - Zero Chrome popups) */}
+        {showClearAuditModal && (
+          <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <Trash2 className="w-5 h-5 text-rose-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      Purge Activity Audit Trails
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Super Admin Authorization Required
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowClearAuditModal(false);
+                    setClearAuditPassword('');
+                    setClearAuditError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-900/40 text-xs text-rose-300 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  Irreversible Audit Deletion
+                </p>
+                <p className="leading-relaxed text-slate-300">
+                  Are you sure you want to permanently erase all activity audit records from Cloudflare D1? This action cannot be undone.
+                </p>
+              </div>
+
+              <form onSubmit={handleConfirmClearAudit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Enter Super Admin Password:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showClearAuditPassword ? 'text' : 'password'}
+                      value={clearAuditPassword}
+                      onChange={e => {
+                        setClearAuditPassword(e.target.value);
+                        setClearAuditError('');
+                      }}
+                      placeholder="Enter Super Admin password..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-rose-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowClearAuditPassword(!showClearAuditPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showClearAuditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {clearAuditError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                    {clearAuditError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClearAuditModal(false);
+                      setClearAuditPassword('');
+                      setClearAuditError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isClearingAudit}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isClearingAudit ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Purging Trails...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Authorize & Clear Audit Logs</span>
                       </>
                     )}
                   </button>
