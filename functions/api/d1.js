@@ -168,8 +168,18 @@ export async function onRequestPost(context) {
         const queryRes = params && params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
         batchResults = [queryRes];
       } else {
-        // Execute multi-query batch in Cloudflare D1
-        const preparedBatch = rawStatements.map(s => env.DB.prepare(s));
+        // Execute multi-query batch in Cloudflare D1 with parameters bound appropriately
+        let paramIndex = 0;
+        const preparedBatch = rawStatements.map(s => {
+          const stmt = env.DB.prepare(s);
+          const placeholderCount = (s.match(/\?/g) || []).length;
+          if (placeholderCount > 0 && params && params.length >= paramIndex + placeholderCount) {
+            const stmtParams = params.slice(paramIndex, paramIndex + placeholderCount);
+            paramIndex += placeholderCount;
+            return stmt.bind(...stmtParams);
+          }
+          return stmt;
+        });
         batchResults = await env.DB.batch(preparedBatch);
       }
 

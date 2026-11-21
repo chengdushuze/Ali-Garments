@@ -501,10 +501,7 @@ export async function syncRecycleBinItemToD1(binItem, bypassQueue = false) {
  * Removes an item from D1 Recycle Bin (upon restore or permanent purge)
  */
 export async function deleteRecycleBinItemFromD1(binId, bypassQueue = false) {
-  const sql = `
-    DELETE FROM recycle_bin WHERE bin_id = ?;
-    DELETE FROM recycle_bin WHERE expires_at <= CURRENT_TIMESTAMP;
-  `;
+  const sql = 'DELETE FROM recycle_bin WHERE bin_id = ?;';
   const res = await executeD1Query(sql, [binId]);
   if (!res.success && !bypassQueue) {
     await addToSyncQueue({ type: 'delete_recycle_bin', binId });
@@ -526,25 +523,25 @@ export async function pullRecycleBinFromD1(customSettings = null) {
   const settings = customSettings || (await getSettings());
 
   try {
-    const sql = `
-      DELETE FROM recycle_bin WHERE expires_at <= CURRENT_TIMESTAMP;
-      SELECT bin_id, item_type, customer_id, title, item_json, deleted_at, expires_at FROM recycle_bin ORDER BY deleted_at DESC;
-    `;
+    const sql = 'SELECT bin_id, item_type, customer_id, title, item_json, deleted_at, expires_at FROM recycle_bin ORDER BY deleted_at DESC;';
     const res = await executeD1Query(sql, [], settings);
 
     if (!res.success || !res.data) {
       return res;
     }
 
-    const selectResult = res.data[1]?.results || res.data[0]?.results || [];
-    const items = selectResult.map(row => {
+    const selectResult = Array.isArray(res.data)
+      ? (res.data[0]?.results || res.data)
+      : (res.data.results || []);
+
+    const items = (Array.isArray(selectResult) ? selectResult : []).map(row => {
       let data = {};
       try {
         data = JSON.parse(row.item_json || '{}');
       } catch (e) {}
 
       return {
-        id: row.bin_id,
+        id: String(row.bin_id),
         type: row.item_type,
         customerId: row.customer_id,
         customerName: data.customerName || data.name || '',
@@ -561,7 +558,7 @@ export async function pullRecycleBinFromD1(customSettings = null) {
     };
   } catch (err) {
     console.error('Error pulling recycle bin from D1:', err);
-    return { success: false, error: err.message };
+    return { success: false, items: [] };
   }
 }
 

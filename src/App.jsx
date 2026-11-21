@@ -599,12 +599,21 @@ export default function App() {
   }, [handleSyncNow]);
 
   // Automatic Internet Connection Listener:
-  // When device reconnects to internet, immediately send all offline changes to Cloudflare D1!
+  // When device reconnects to internet, flush pending offline queue to Cloudflare D1
   useEffect(() => {
-    const onOnline = () => {
-      console.log('⚡ [Connection Restored] Device reconnected to internet! Auto-syncing offline changes to D1...');
+    const onOnline = async () => {
+      console.log('⚡ [Connection Restored] Device reconnected to internet.');
       setSyncState(prev => ({ ...prev, isOffline: false }));
-      handleSyncNow();
+      const queue = await getSyncQueue();
+      if (queue && queue.length > 0) {
+        const res = await processSyncQueue();
+        const remainingQueue = await getSyncQueue();
+        setSyncState(prev => ({
+          ...prev,
+          pendingCount: remainingQueue.length,
+          lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+        }));
+      }
     };
 
     const onOffline = () => {
@@ -615,23 +624,11 @@ export default function App() {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
 
-    // Periodic Background Sync: checks every 30 seconds if online and there are pending changes
-    const periodicTimer = setInterval(async () => {
-      if (navigator.onLine) {
-        const queue = await getSyncQueue();
-        if (queue && queue.length > 0) {
-          console.log(`🔄 [Auto-Sync] Found ${queue.length} pending offline items. Flushing to D1...`);
-          handleSyncNow();
-        }
-      }
-    }, 30000);
-
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
-      clearInterval(periodicTimer);
     };
-  }, [handleSyncNow]);
+  }, []);
 
   // Save Settings
   const handleSaveSettings = async (newSettings) => {
@@ -684,11 +681,15 @@ export default function App() {
     await saveCustomers(updatedCustomers);
     await saveCustomerTransactions(newId, initialTxs);
 
-    // Sync to D1
-    syncCustomerToD1(newCustomer, initialTxs).then(res => {
-      if (res && res.isQuotaExceeded) {
-        setSyncState(prev => ({ ...prev, isQuotaExceeded: true, pendingCount: prev.pendingCount + 1 }));
-      }
+    // Sync to D1 automatically on save
+    syncCustomerToD1(newCustomer, initialTxs).then(async (res) => {
+      const q = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        pendingCount: q.length,
+        isQuotaExceeded: Boolean(res?.isQuotaExceeded),
+        lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+      }));
     });
   };
 
@@ -702,10 +703,15 @@ export default function App() {
 
     await saveCustomers(updatedCustomers);
     const custTxs = transactionsMap[updatedCust.id] || [];
-    syncCustomerToD1(updatedCust, custTxs).then(res => {
-      if (res && res.isQuotaExceeded) {
-        setSyncState(prev => ({ ...prev, isQuotaExceeded: true, pendingCount: prev.pendingCount + 1 }));
-      }
+    // Sync to D1 automatically on save
+    syncCustomerToD1(updatedCust, custTxs).then(async (res) => {
+      const q = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        pendingCount: q.length,
+        isQuotaExceeded: Boolean(res?.isQuotaExceeded),
+        lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+      }));
     }).catch(err => {
       console.warn('Background sync customer update failed:', err);
     });
@@ -752,11 +758,15 @@ export default function App() {
     await saveCustomers(updatedCustomers);
     await saveCustomerTransactions(customer.id, updatedTxs);
 
-    // Sync to Cloudflare D1
-    syncCustomerToD1(updatedCustomer, updatedTxs).then(res => {
-      if (res && res.isQuotaExceeded) {
-        setSyncState(prev => ({ ...prev, isQuotaExceeded: true, pendingCount: prev.pendingCount + 1 }));
-      }
+    // Sync to Cloudflare D1 automatically on save
+    syncCustomerToD1(updatedCustomer, updatedTxs).then(async (res) => {
+      const q = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        pendingCount: q.length,
+        isQuotaExceeded: Boolean(res?.isQuotaExceeded),
+        lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+      }));
     });
   };
 
@@ -820,12 +830,20 @@ export default function App() {
 
     if (binItem) {
       setRecycleBinItems(prev => [binItem, ...prev.filter(i => i.id !== binItem.id)]);
-      // Sync to D1 Recycle Bin & auto-purge expired across devices
-      syncRecycleBinItemToD1(binItem);
+      // Sync to D1 Recycle Bin
+      await syncRecycleBinItemToD1(binItem);
     }
 
     // Sync updated customer single row chunk to D1
-    syncCustomerToD1(updatedCustomer, updatedTxs);
+    syncCustomerToD1(updatedCustomer, updatedTxs).then(async (res) => {
+      const q = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        pendingCount: q.length,
+        isQuotaExceeded: Boolean(res?.isQuotaExceeded),
+        lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+      }));
+    });
   };
 
   // 2. Customer Deletion Consent Prompt
@@ -876,11 +894,18 @@ export default function App() {
 
     if (binItem) {
       setRecycleBinItems(prev => [binItem, ...prev.filter(i => i.id !== binItem.id)]);
-      syncRecycleBinItemToD1(binItem);
+      await syncRecycleBinItemToD1(binItem);
     }
 
     // Remove customer & chunk from D1
-    deleteCustomerFromD1(customerId);
+    deleteCustomerFromD1(customerId).then(async (res) => {
+      const q = await getSyncQueue();
+      setSyncState(prev => ({
+        ...prev,
+        pendingCount: q.length,
+        lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+      }));
+    });
   };
 
   // 3. Restore Item from Recycle Bin
@@ -949,15 +974,27 @@ export default function App() {
   // 4. Permanent Delete from Recycle Bin
   const handlePermanentDeleteFromBin = async (binId) => {
     await removeFromRecycleBin(binId);
-    deleteRecycleBinItemFromD1(binId);
     setRecycleBinItems(prev => prev.filter(i => i.id !== binId));
+    const res = await deleteRecycleBinItemFromD1(binId);
+    const q = await getSyncQueue();
+    setSyncState(prev => ({
+      ...prev,
+      pendingCount: q.length,
+      lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+    }));
   };
 
   // 5. Empty Entire Recycle Bin
   const handleEmptyRecycleBin = async () => {
     await clearLocalRecycleBin();
-    clearD1RecycleBin();
     setRecycleBinItems([]);
+    const res = await clearD1RecycleBin();
+    const q = await getSyncQueue();
+    setSyncState(prev => ({
+      ...prev,
+      pendingCount: q.length,
+      lastSyncTime: res?.success ? new Date().toISOString() : prev.lastSyncTime
+    }));
   };
 
   // 6. Refresh Recycle Bin from D1 (auto-purging expired >30 days)

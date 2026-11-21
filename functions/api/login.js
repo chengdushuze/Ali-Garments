@@ -269,7 +269,7 @@ export async function onRequestPost(context) {
 
       const message = remaining === 0
         ? 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.'
-        : (user ? 'Wrong password. Please try again.' : 'Invalid email or password.');
+        : 'Email or Password Are incorrect.';
 
       return new Response(
         JSON.stringify({
