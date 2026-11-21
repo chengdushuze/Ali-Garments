@@ -15,15 +15,19 @@ export default function DashboardStats({
   let todayCreditGiven = 0;
 
   const todayStr = new Date().toISOString().slice(0, 10);
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+  const safeMap = transactionsMap && typeof transactionsMap === 'object' ? transactionsMap : {};
 
-  customers.forEach(c => {
-    const txs = transactionsMap[c.id] || [];
+  safeCustomers.forEach(c => {
+    if (!c || !c.id) return;
+    const txs = Array.isArray(safeMap[c.id]) ? safeMap[c.id] : [];
     totalTxCount += txs.length;
 
     let custDebit = 0;  // Maal Diya (You Gave)
     let custCredit = 0; // Paisa Mila (You Got)
 
     txs.forEach(t => {
+      if (!t) return;
       const amt = Number(t.amount || 0);
       if (t.type === 'give') {
         custDebit += amt;
@@ -31,7 +35,7 @@ export default function DashboardStats({
         custCredit += amt;
       }
 
-      const txDateStr = (t.dateTime || t.date || '').slice(0, 10);
+      const txDateStr = String(t.dateTime || t.date || '').slice(0, 10);
       if (txDateStr === todayStr) {
         if (t.type === 'get') todayCashIn += amt;
         if (t.type === 'give') todayCreditGiven += amt;
@@ -73,7 +77,7 @@ export default function DashboardStats({
               <span className="text-lg sm:text-xl lg:text-lg xl:text-xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalReceivable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
-              From {customers.filter(c => (c.balance || 0) > 0).length} customers
+              From {safeCustomers.filter(c => c && (Number(c.balance) || 0) > 0).length} customers
             </p>
           </div>
         </div>
@@ -99,7 +103,7 @@ export default function DashboardStats({
               <span className="text-lg sm:text-xl lg:text-lg xl:text-xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalPayable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
-              To {customers.filter(c => (c.balance || 0) < 0).length} suppliers/accounts
+              To {safeCustomers.filter(c => c && (Number(c.balance) || 0) < 0).length} suppliers/accounts
             </p>
           </div>
         </div>

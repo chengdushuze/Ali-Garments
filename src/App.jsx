@@ -466,10 +466,25 @@ export default function App() {
       // Cloudflare D1 Native Sync is automatically connected via Cloudflare Pages proxy (/api/d1)
       const isD1Configured = true;
 
-      // Pull latest Recycle Bin items from D1 across devices
-      if (isD1Configured) {
+      // Auto-pull all customer ledgers from D1 on initial app load if online
+      if (isD1Configured && navigator.onLine) {
+        pullAllFromD1(savedSettings).then(async (d1PullRes) => {
+          if (d1PullRes && d1PullRes.success && Array.isArray(d1PullRes.customers) && d1PullRes.customers.length > 0) {
+            console.log(`✅ Loaded ${d1PullRes.customers.length} customer ledgers from Cloudflare D1 on launch.`);
+            setCustomers(d1PullRes.customers);
+            setTransactionsMap(d1PullRes.transactionsMap || {});
+            await saveCustomers(d1PullRes.customers);
+            for (const [cId, txs] of Object.entries(d1PullRes.transactionsMap || {})) {
+              await saveCustomerTransactions(cId, txs);
+            }
+          }
+        }).catch(err => {
+          console.warn('Startup D1 pull warning:', err);
+        });
+
+        // Pull latest Recycle Bin items from D1 across devices
         pullRecycleBinFromD1(savedSettings).then(async (d1BinRes) => {
-          if (d1BinRes && d1BinRes.success && d1BinRes.items) {
+          if (d1BinRes && d1BinRes.success && Array.isArray(d1BinRes.items)) {
             // Merge with local
             const idMap = new Map();
             for (const item of d1BinRes.items) idMap.set(item.id, item);
@@ -480,7 +495,7 @@ export default function App() {
             setRecycleBinItems(merged);
             await saveRecycleBin(merged);
           }
-        });
+        }).catch(() => {});
       }
       const queue = await getSyncQueue();
       setSyncState({
@@ -519,18 +534,25 @@ export default function App() {
 
       // Pull from D1 if available
       const pullRes = await pullAllFromD1();
-      if (pullRes && pullRes.success && pullRes.customers && pullRes.customers.length > 0) {
+      if (pullRes && pullRes.success && Array.isArray(pullRes.customers) && pullRes.customers.length > 0) {
         setCustomers(pullRes.customers);
-        setTransactionsMap(pullRes.transactionsMap);
+        setTransactionsMap(pullRes.transactionsMap || {});
         await saveCustomers(pullRes.customers);
-        for (const [cId, txs] of Object.entries(pullRes.transactionsMap)) {
+        for (const [cId, txs] of Object.entries(pullRes.transactionsMap || {})) {
           await saveCustomerTransactions(cId, txs);
         }
+
+        // Safely re-link selectedCustomer if it still exists in the pulled customers list
+        setSelectedCustomer(prev => {
+          if (!prev) return null;
+          const found = pullRes.customers.find(c => c.id === prev.id);
+          return found || null;
+        });
       }
 
       // Pull and sync Recycle Bin from D1 across devices
       const d1BinRes = await pullRecycleBinFromD1();
-      if (d1BinRes && d1BinRes.success && d1BinRes.items) {
+      if (d1BinRes && d1BinRes.success && Array.isArray(d1BinRes.items)) {
         setRecycleBinItems(d1BinRes.items);
         await saveRecycleBin(d1BinRes.items);
       }

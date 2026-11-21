@@ -156,10 +156,24 @@ export async function onRequestPost(context) {
 
     if (env.DB) {
       // Native Cloudflare D1 binding
-      const stmt = env.DB.prepare(cleanSql);
-      const result = params && params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
+      // Support multi-statement queries seamlessly by splitting on semicolon
+      const rawStatements = cleanSql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
 
-      return new Response(JSON.stringify({ success: true, result: [result] }), {
+      let batchResults;
+      if (rawStatements.length <= 1) {
+        const stmt = env.DB.prepare(rawStatements[0] || cleanSql);
+        const queryRes = params && params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
+        batchResults = [queryRes];
+      } else {
+        // Execute multi-query batch in Cloudflare D1
+        const preparedBatch = rawStatements.map(s => env.DB.prepare(s));
+        batchResults = await env.DB.batch(preparedBatch);
+      }
+
+      return new Response(JSON.stringify({ success: true, result: batchResults }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

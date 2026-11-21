@@ -40,17 +40,27 @@ export default function CustomerDetail({
 
   const bal = Number(customer.balance || 0);
 
-  // Filter transactions
-  const filteredTxs = (transactions || []).filter(tx => {
+  const searchLower = String(txSearch || '').toLowerCase();
+  const safeTxs = Array.isArray(transactions) ? transactions : [];
+
+  // Filter transactions safely
+  const filteredTxs = safeTxs.filter(tx => {
+    if (!tx) return false;
+    const descStr = String(tx.description || '').toLowerCase();
+    const billStr = String(tx.billNumber || '').toLowerCase();
+    const methodStr = String(tx.paymentMethod || '').toLowerCase();
+
     const matchSearch =
-      (tx.description && tx.description.toLowerCase().includes(txSearch.toLowerCase())) ||
-      (tx.billNumber && tx.billNumber.toLowerCase().includes(txSearch.toLowerCase())) ||
-      (tx.paymentMethod && tx.paymentMethod.toLowerCase().includes(txSearch.toLowerCase()));
+      !searchLower ||
+      descStr.includes(searchLower) ||
+      billStr.includes(searchLower) ||
+      methodStr.includes(searchLower);
 
     if (!matchSearch) return false;
 
     if (dateFilter === 'week') {
       const txDate = new Date(tx.dateTime || tx.date);
+      if (isNaN(txDate.getTime())) return true;
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
       return txDate >= weekAgo;
@@ -58,6 +68,7 @@ export default function CustomerDetail({
 
     if (dateFilter === 'month') {
       const txDate = new Date(tx.dateTime || tx.date);
+      if (isNaN(txDate.getTime())) return true;
       const monthAgo = new Date();
       monthAgo.setMonth(monthAgo.getMonth() - 1);
       return txDate >= monthAgo;

@@ -288,74 +288,117 @@ export async function syncInvoiceToD1(invoice) {
 }
 
 /**
+ * Safe parser for customer rows and transaction chunks
+ */
+function parseCustomerRowsAndChunks(custRows, chunkRows) {
+  const chunksByCust = {};
+  for (const chunk of chunkRows || []) {
+    if (!chunk || !chunk.customer_id) continue;
+    if (!chunksByCust[chunk.customer_id]) {
+      chunksByCust[chunk.customer_id] = [];
+    }
+    chunksByCust[chunk.customer_id].push(chunk);
+  }
+
+  const customers = [];
+  const transactionsMap = {};
+
+  for (const row of custRows || []) {
+    if (!row || !row.customer_id) continue;
+    const custId = String(row.customer_id);
+    const custChunks = chunksByCust[custId] || [];
+    custChunks.sort((a, b) => Number(a.chunk_index || 0) - Number(b.chunk_index || 0));
+
+    let allTxs = [];
+    for (const c of custChunks) {
+      try {
+        const rawJson = c.transactions_json;
+        const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson || '[]') : (rawJson || []);
+        if (Array.isArray(parsed)) {
+          for (const tx of parsed) {
+            if (!tx) continue;
+            allTxs.push({
+              id: tx.id || `tx_${Math.random().toString(36).substring(2, 9)}`,
+              amount: Number(tx.amount || 0),
+              type: tx.type === 'get' ? 'get' : 'give',
+              description: String(tx.description || ''),
+              billNumber: String(tx.billNumber || ''),
+              paymentMethod: String(tx.paymentMethod || 'cash'),
+              date: tx.date || tx.dateTime || new Date().toISOString(),
+              dateTime: tx.dateTime || tx.date || new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing chunk txs for ' + custId, e);
+      }
+    }
+
+    const customerObj = {
+      id: custId,
+      name: String(row.name || 'Unnamed Party').trim(),
+      phone: String(row.phone || '').trim(),
+      address: String(row.address || '').trim(),
+      category: String(row.category || 'customer').trim(),
+      balance: Number(row.balance || 0),
+      totalTransactions: Number(row.total_transactions || allTxs.length || 0),
+      createdAt: row.created_at || new Date().toISOString(),
+      lastTransactionAt: row.updated_at || row.created_at || new Date().toISOString()
+    };
+
+    customers.push(customerObj);
+    transactionsMap[custId] = allTxs;
+  }
+
+  return {
+    success: true,
+    customers,
+    transactionsMap,
+    message: `Successfully loaded ${customers.length} customer ledgers from D1`
+  };
+}
+
+/**
  * Pulls all customers and chunks from D1
  */
 export async function pullAllFromD1(customSettings = null) {
   const settings = customSettings || (await getSettings());
 
   try {
-    const res = await executeD1Query(`
-      SELECT customer_id, name, phone, address, category, balance, current_chunk, total_transactions, created_at, updated_at FROM customers ORDER BY name ASC;
-      SELECT customer_id, chunk_index, transactions_json, byte_size, count, updated_at FROM customer_chunks;
-    `, [], settings);
+    // 1. Fetch customer directory
+    const custRes = await executeD1Query(
+      'SELECT customer_id, name, phone, address, category, balance, current_chunk, total_transactions, created_at, updated_at FROM customers ORDER BY name ASC;',
+      [],
+      settings
+    );
 
-    if (!res.success || !res.data) {
-      return res;
-    }
+    // 2. Fetch all transaction chunks
+    const chunkRes = await executeD1Query(
+      'SELECT customer_id, chunk_index, transactions_json, byte_size, count, updated_at FROM customer_chunks;',
+      [],
+      settings
+    );
 
-    const custRows = res.data[0]?.results || [];
-    const chunkRows = res.data[1]?.results || [];
+    let custRows = custRes.data?.[0]?.results || custRes.data?.results || (Array.isArray(custRes.data) ? custRes.data : []);
+    let chunkRows = chunkRes.data?.[0]?.results || chunkRes.data?.results || (Array.isArray(chunkRes.data) ? chunkRes.data : []);
 
-    const chunksByCust = {};
-    for (const chunk of chunkRows) {
-      if (!chunksByCust[chunk.customer_id]) {
-        chunksByCust[chunk.customer_id] = [];
+    // Fallback: If separate queries didn't yield results, attempt combined multi-statement batch
+    if ((!Array.isArray(custRows) || custRows.length === 0) && custRes.error) {
+      const batchRes = await executeD1Query(`
+        SELECT customer_id, name, phone, address, category, balance, current_chunk, total_transactions, created_at, updated_at FROM customers ORDER BY name ASC;
+        SELECT customer_id, chunk_index, transactions_json, byte_size, count, updated_at FROM customer_chunks;
+      `, [], settings);
+
+      if (batchRes && batchRes.success && Array.isArray(batchRes.data)) {
+        custRows = batchRes.data[0]?.results || [];
+        chunkRows = batchRes.data[1]?.results || [];
       }
-      chunksByCust[chunk.customer_id].push(chunk);
     }
 
-    const customers = [];
-    const transactionsMap = {};
-
-    for (const row of custRows) {
-      const custChunks = chunksByCust[row.customer_id] || [];
-      custChunks.sort((a, b) => a.chunk_index - b.chunk_index);
-
-      let allTxs = [];
-      for (const c of custChunks) {
-        try {
-          const parsed = JSON.parse(c.transactions_json || '[]');
-          allTxs = allTxs.concat(parsed);
-        } catch (e) {
-          console.error('Error parsing chunk txs for ' + row.customer_id, e);
-        }
-      }
-
-      const customerObj = {
-        id: row.customer_id,
-        name: row.name,
-        phone: row.phone,
-        address: row.address,
-        category: row.category,
-        balance: row.balance,
-        totalTransactions: row.total_transactions,
-        createdAt: row.created_at,
-        lastTransactionAt: row.updated_at
-      };
-
-      customers.push(customerObj);
-      transactionsMap[row.customer_id] = allTxs;
-    }
-
-    return {
-      success: true,
-      customers,
-      transactionsMap,
-      message: `Successfully loaded ${customers.length} customer ledgers from D1`
-    };
+    return parseCustomerRowsAndChunks(custRows, chunkRows);
   } catch (err) {
     console.error('Error pulling from D1:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, customers: [], transactionsMap: {} };
   }
 }
 

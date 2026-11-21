@@ -20,12 +20,21 @@ export default function CustomerList({
     }
   }, [filterTabProp]);
 
-  // Filter customers
-  const filtered = customers.filter(c => {
+  // Filter customers safely
+  const safeCustomers = Array.isArray(customers) ? customers : [];
+  const searchLower = String(searchTerm || '').toLowerCase();
+
+  const filtered = safeCustomers.filter(c => {
+    if (!c) return false;
+    const nameStr = String(c.name || '').toLowerCase();
+    const phoneStr = String(c.phone || '');
+    const addressStr = String(c.address || '').toLowerCase();
+
     const matchSearch =
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.phone && c.phone.includes(searchTerm)) ||
-      (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase()));
+      !searchLower ||
+      nameStr.includes(searchLower) ||
+      phoneStr.includes(searchLower) ||
+      addressStr.includes(searchLower);
 
     const bal = Number(c.balance || 0);
 
@@ -36,9 +45,9 @@ export default function CustomerList({
     return true;
   });
 
-  const receivableCount = customers.filter(c => (c.balance || 0) > 0).length;
-  const payableCount = customers.filter(c => (c.balance || 0) < 0).length;
-  const settledCount = customers.filter(c => (c.balance || 0) === 0).length;
+  const receivableCount = safeCustomers.filter(c => c && (Number(c.balance) || 0) > 0).length;
+  const payableCount = safeCustomers.filter(c => c && (Number(c.balance) || 0) < 0).length;
+  const settledCount = safeCustomers.filter(c => c && (Number(c.balance) || 0) === 0).length;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm overflow-hidden flex flex-col h-full transition-all">
