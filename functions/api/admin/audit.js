@@ -65,11 +65,9 @@ export async function onRequestGet(context) {
       logs = data?.result?.[0]?.results || [];
     }
 
-    // If regular admin (not super_admin), filter out all Super Admin audit trails
-    const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
+    // If regular admin (not super_admin), filter out Super Admin audit trails
     if (session.role !== 'super_admin') {
       logs = logs.filter(l => 
-        l.user_email?.toLowerCase() !== SUPER_ADMIN_EMAIL &&
         !l.details?.toLowerCase().includes('super admin') &&
         !l.action?.toLowerCase().includes('super_admin')
       );
@@ -81,9 +79,9 @@ export async function onRequestGet(context) {
         {
           id: 1,
           user_id: session.userId || 1,
-          user_email: session.email || 'admin@ali-garments.com',
+          user_email: session.email || 'system',
           action: 'SYSTEM_READY',
-          details: 'Audit logging engine active for ALI Garments portal.',
+          details: 'Audit logging engine active for ALI Garments portal',
           ip_address: '127.0.0.1',
           created_at: new Date().toISOString(),
         },

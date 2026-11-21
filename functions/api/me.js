@@ -92,13 +92,16 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Strict Geo Restriction check (Super Admin always allowed)
+  // Strict Geo Restriction check (Super Admin & Admin & users with foreign/VPN access)
   const clientCountry = request.cf?.country;
-  const isSuper = liveUser.role === 'super_admin' || liveUser.email?.toLowerCase() === 'admin@chengdushuze.com';
-  if (clientCountry && clientCountry !== 'PK' && !isSuper && liveUser.allow_foreign_access !== 1) {
+  const isSuper = liveUser.role === 'super_admin';
+  const isAdmin = liveUser.role === 'admin';
+  const isVpnAllowed = isSuper || isAdmin || Number(liveUser.allow_vpn) === 1 || Number(liveUser.allow_foreign_access) === 1;
+
+  if (clientCountry && clientCountry !== 'PK' && !isVpnAllowed) {
     return new Response(
       JSON.stringify({
-        error: `Access restricted to Pakistan (PK). Your detected location is ${clientCountry}. Please contact Super Admin for foreign access authorization.`,
+        error: `Access restricted to Pakistan (PK) Your detected location is ${clientCountry} Please contact Super Admin for foreign access authorization`,
         code: 'GEO_BLOCKED',
         isGeoBlocked: true,
         country: clientCountry
@@ -110,11 +113,11 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Strict VPN / Proxy check (Super Admin always allowed)
-  if (isVpnOrProxy(request) && !isSuper && liveUser.allow_vpn !== 1) {
+  // Strict VPN / Proxy check
+  if (isVpnOrProxy(request) && !isVpnAllowed) {
     return new Response(
       JSON.stringify({
-        error: 'VPN or Proxy connection detected. Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel.',
+        error: 'VPN or Proxy connection detected Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel',
         code: 'VPN_BLOCKED',
         isVpnBlocked: true
       }),

@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "appName": "ALI Garments Khata & ERP",
+  "exportedAt": "2026-11-22T00:00:00.000Z",
+  "description": "Full Cloud Backup containing application settings, customers ledger, and transaction history.",
+  "settings": {
+    "shopName": "ALI Garments",
+    "shopTagline": "Wholesale & Retail Premium Quality Fabrics & Garments",
+    "phone1": "+92 300 1234567",
+    "phone2": "+92 321 7654321",
+    "address": "Shop # 14-16, Cloth Market, Faisalabad, Pakistan",
+    "ntn": "NTN-786014-9",
+    "currency": "Rs.",
+    "logoUrl": "",
+    "d1ProxyUrl": "/api/d1",
+    "bankName": "Meezan Bank Limited",
+    "accountTitle": "ALI GARMENTS",
+    "accountNumber": "02010108923456",
+    "iban": "PK12MEZN0002010108923456",
+    "jazzCash": "0300-1234567",
+    "easyPaisa": "0321-7654321",
+    "theme": "light",
+    "terms": "1. Sold goods are not returnable without bill.\n2. Payment terms 15 days net.\n3. In case of dispute, Faisalabad jurisdiction applies."
+  },
+  "customers": [],
+  "transactions": [],
+  "recycleBin": []
+}

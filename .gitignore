@@ -43,6 +43,7 @@ Thumbs.db
 # Temporary data files
 scratch/
 .temp/
+cloud-backup/dumps/
 
 # APK & Build Binaries
 *.apk

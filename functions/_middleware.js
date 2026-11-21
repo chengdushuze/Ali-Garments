@@ -175,8 +175,6 @@ export async function onRequest(context) {
             if (
               session.role === 'super_admin' ||
               session.role === 'admin' ||
-              session.email?.toLowerCase() === 'admin@chengdushuze.com' ||
-              session.email?.toLowerCase() === 'admin@aligarments.com' ||
               Number(session.allow_foreign_access) === 1 ||
               Number(session.allow_vpn) === 1
             ) {
@@ -190,8 +188,6 @@ export async function onRequest(context) {
                 liveUser &&
                 (liveUser.role === 'super_admin' ||
                  liveUser.role === 'admin' ||
-                 liveUser.email?.toLowerCase() === 'admin@chengdushuze.com' ||
-                 liveUser.email?.toLowerCase() === 'admin@aligarments.com' ||
                  Number(liveUser.allow_foreign_access) === 1 ||
                  Number(liveUser.allow_vpn) === 1)
               ) {

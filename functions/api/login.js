@@ -1,7 +1,5 @@
 import { verifyPassword, signSessionToken, getSessionSecret, getCorsHeaders, isVpnOrProxy } from './_auth.js';
 
-const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
-
 // GET /api/login - Prohibit auto-seeding over public HTTP; return 405 Method Not Allowed
 export async function onRequestGet(context) {
   const { request } = context;
@@ -32,7 +30,7 @@ export async function onRequestPost(context) {
 
     // Ensure admins and super admins always have VPN and foreign access enabled
     await env.DB.prepare(
-      "UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role IN ('super_admin', 'admin') OR LOWER(email) IN ('admin@chengdushuze.com', 'admin@aligarments.com')"
+      "UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role IN ('super_admin', 'admin')"
     ).run().catch(() => {});
 
     // Proactively clear any legacy login attempt lockouts so users are never blocked
@@ -158,7 +156,7 @@ export async function onRequestPost(context) {
     }
 
     // 4. VPN and Foreign Geo-Policy Validation
-    const isSuperAdmin = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com' || user.email?.toLowerCase() === 'admin@aligarments.com';
+    const isSuperAdmin = user.role === 'super_admin';
     const isAdmin = user.role === 'admin';
     const isVpnAllowed = isSuperAdmin || isAdmin || Number(user.allow_vpn) === 1 || Number(user.allow_foreign_access) === 1;
 
@@ -272,7 +270,7 @@ export async function onRequestPost(context) {
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
     const FIVE_DAYS_SECONDS = 5 * 24 * 60 * 60; // 432,000 seconds
 
-    const isSuper = user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com' || user.email?.toLowerCase() === 'admin@aligarments.com';
+    const isSuper = user.role === 'super_admin';
     const sessionPayload = {
       userId: user.id,
       email: user.email,

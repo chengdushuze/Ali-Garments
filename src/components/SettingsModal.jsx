@@ -113,42 +113,6 @@ export default function SettingsModal({
     reader.readAsDataURL(file);
   };
 
-  const handleTestD1Connection = async () => {
-    setTestStatus({ loading: true, message: 'Connecting to Cloudflare D1...' });
-
-    if (!formData.d1AccountId || !formData.d1DatabaseId || !formData.d1ApiToken) {
-      setTestStatus({
-        loading: false,
-        success: false,
-        message: 'Please provide Account ID, Database ID, and API Token first.'
-      });
-      return;
-    }
-
-    try {
-      const initRes = await initD1Tables(formData);
-      if (initRes.success) {
-        setTestStatus({
-          loading: false,
-          success: true,
-          message: 'Connected successfully! D1 database tables verified & initialized.'
-        });
-      } else {
-        setTestStatus({
-          loading: false,
-          success: false,
-          message: initRes.message || 'Connection failed. Please verify credentials.'
-        });
-      }
-    } catch (e) {
-      setTestStatus({
-        loading: false,
-        success: false,
-        message: `Error: ${e.message}`
-      });
-    }
-  };
-
   const handleSave = () => {
     onSaveSettings(formData);
     onClose();

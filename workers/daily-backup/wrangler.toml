@@ -10,10 +10,10 @@ crons = ["0 20 * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "ali-garments"
-database_id = "5fbfb37e-e24a-4b51-9401-e861ff4b6dc1"
+database_id = "<YOUR_PRIMARY_D1_DATABASE_ID>"
 
 # 2. Nightly Backup Target Database Binding
 [[d1_databases]]
 binding = "DB_BACKUP"
 database_name = "ali-graments-backup"
-database_id = "087a12df-88ef-4633-b81f-af6bad7a2098"
+database_id = "<YOUR_BACKUP_D1_DATABASE_ID>"

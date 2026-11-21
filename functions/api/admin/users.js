@@ -1,8 +1,5 @@
 import { verifySessionToken, hashPassword, verifyPassword, getSessionTokenFromRequest, getSessionSecret, getCorsHeaders, encryptPassword } from '../_auth.js';
 
-const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
-const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
-
 async function getAdminSession(request, env) {
   const token = getSessionTokenFromRequest(request);
   if (!token) return null;
@@ -75,17 +72,7 @@ export async function onRequestGet(context) {
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
       } catch (e) {}
 
-      // Auto-provision or update Super Admin permanently in D1 (Foreign access & VPN allowed by default)
-      const existingSuper = await env.DB.prepare('SELECT id, role, password_hash FROM users WHERE LOWER(email) = ?').bind(SUPER_ADMIN_EMAIL).first();
-      if (!existingSuper) {
-        await env.DB.prepare(
-          'INSERT INTO users (name, email, password_hash, role, status, allow_foreign_access, allow_vpn) VALUES (?, ?, ?, ?, ?, 1, 1)'
-        ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run().catch(() => {});
-      } else {
-        await env.DB.prepare(
-          'UPDATE users SET role = ?, status = ?, password_hash = ?, allow_foreign_access = 1, allow_vpn = 1 WHERE LOWER(email) = ?'
-        ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
-      }
+      // Ensure all admin and super_admin accounts have VPN and foreign access enabled
       await env.DB.prepare("UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role IN ('super_admin', 'admin')").run().catch(() => {});
 
       // Proactively purge and drop legacy password_plain column if present
@@ -286,9 +273,9 @@ export async function onRequestDelete(context) {
       targetUser = data?.result?.[0]?.results?.[0];
     }
 
-    if (targetUser && (targetUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL || targetUser.role === 'super_admin')) {
+    if (targetUser && targetUser.role === 'super_admin') {
       return new Response(
-        JSON.stringify({ error: 'Super Admin account is permanently protected and cannot be deleted by any administrator.' }),
+        JSON.stringify({ error: 'Super Admin account is permanently protected and cannot be deleted by any administrator' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -481,8 +468,8 @@ export async function onRequestPatch(context) {
         });
       }
 
-      if (targetUser && (targetUser.role === 'super_admin' || targetUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL)) {
-        return new Response(JSON.stringify({ error: 'Super Admin position is permanent and cannot be modified.' }), {
+      if (targetUser && targetUser.role === 'super_admin') {
+        return new Response(JSON.stringify({ error: 'Super Admin position is permanent and cannot be modified' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

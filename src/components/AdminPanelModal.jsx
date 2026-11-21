@@ -1017,7 +1017,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="tariq@aligarments.com"
+                        placeholder="user@example.com"
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>

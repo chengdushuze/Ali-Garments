@@ -19,42 +19,23 @@ export async function executeD1Query(sql, params = [], customSettings = null) {
   }
 
   const endpoint = settings.d1ProxyUrl || '/api/d1';
-  const accountId = settings.d1AccountId?.trim();
-  const databaseId = settings.d1DatabaseId?.trim();
-  const apiToken = settings.d1ApiToken?.trim();
 
   try {
-    // 1. Try Cloudflare Pages /api/d1 endpoint (Native env.DB binding)
+    // Standard secure Cloudflare Pages /api/d1 endpoint (Native env.DB binding)
     const headers = { 'Content-Type': 'application/json' };
     const authToken = getStoredToken();
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
-    if (accountId) headers['x-cf-account-id'] = accountId;
-    if (databaseId) headers['x-cf-database-id'] = databaseId;
-    if (apiToken) headers['x-cf-api-token'] = apiToken;
 
-    let response = await apiFetch(endpoint, {
+    const response = await apiFetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({ sql, params })
     }).catch(err => {
-      console.warn('Proxy fetch failed, attempting fallback...', err);
+      console.warn('API fetch failed:', err);
       return null;
     });
-
-    // 2. Direct Cloudflare REST fallback if proxy fails and direct credentials are provided
-    if ((!response || response.status === 404 || response.status === 405 || !response.ok) && accountId && databaseId && apiToken) {
-      const directCfUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-      response = await fetch(directCfUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ sql, params })
-      }).catch(() => null);
-    }
 
     if (!response) {
       return {

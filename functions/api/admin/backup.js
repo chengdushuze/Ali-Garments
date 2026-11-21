@@ -91,11 +91,11 @@ export async function onRequestPost(context) {
     });
   }
 
-  const backupDbId = env.BACKUP_DATABASE_ID || '087a12df-88ef-4633-b81f-af6bad7a2098';
+  const backupDbId = env.BACKUP_DATABASE_ID;
   const backupDbName = 'ali-graments-backup';
 
   try {
-    console.log(`[Backup] Starting nightly backup to ${backupDbName} (${backupDbId})...`);
+    console.log(`[Backup] Starting nightly backup to ${backupDbName}...`);
 
     // 1. Fetch all data from primary D1 database
     let users = [];
@@ -260,7 +260,6 @@ export async function onRequestPost(context) {
         stats: {
           timestamp: new Date().toISOString(),
           targetDatabase: backupDbName,
-          targetDatabaseId: backupDbId,
           backedUpUsers: users.length,
           backedUpCustomers: customers.length,
           backedUpChunks: chunks.length,

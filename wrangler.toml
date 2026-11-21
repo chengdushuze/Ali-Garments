@@ -3,14 +3,8 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
-# 1. Primary Cloudflare D1 Database Binding
-[[d1_databases]]
-binding = "DB"
-database_name = "ali-garments"
-database_id = "5fbfb37e-e24a-4b51-9401-e861ff4b6dc1"
-
-# 2. Nightly Backup Cloudflare D1 Database Binding (Daily Every Night)
-[[d1_databases]]
-binding = "DB_BACKUP"
-database_name = "ali-graments-backup"
-database_id = "087a12df-88ef-4633-b81f-af6bad7a2098"
+# Cloudflare Pages D1 Database Bindings
+# Note: In Cloudflare Pages, D1 databases are securely bound via the Cloudflare Dashboard:
+# Settings > Functions > D1 Database Bindings
+#   - Binding: "DB"        -> Select "ali-garments"
+#   - Binding: "DB_BACKUP" -> Select "ali-graments-backup"
