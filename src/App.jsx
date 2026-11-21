@@ -118,11 +118,26 @@ export default function App() {
     verifyAuth();
   }, []);
 
-  // App Lock State (for Android APK and mobile devices)
+  // App Lock State (Unlimited on same tab; locks after 10 minutes away)
   const [appLockConfig, setAppLockConfig] = useState(() => getAppLockConfig());
   const [isAppLocked, setIsAppLocked] = useState(() => {
     const c = getAppLockConfig();
-    return Boolean(c && c.enabled && c.pin);
+    if (!c || !c.enabled || !c.pin) return false;
+
+    const isSessionUnlocked = sessionStorage.getItem('ag_app_unlocked') === 'true';
+    const hiddenTime = Number(localStorage.getItem('ag_tab_hidden_time') || 0);
+    const lockTimeoutMs = (c.autoLockMinutes ?? 10) * 60 * 1000;
+
+    // If unlocked in this tab session and user was not away for >= 10 mins, stay unlocked
+    if (isSessionUnlocked) {
+      if (hiddenTime > 0 && Date.now() - hiddenTime >= lockTimeoutMs) {
+        return true; // Was away for >= 10 minutes!
+      }
+      return false; // Stays unlocked for unlimited time on the active tab
+    }
+
+    // New session / fresh tab: require PIN entry
+    return true;
   });
 
   const handleSaveAppLockConfig = (newConfig) => {
@@ -130,28 +145,55 @@ export default function App() {
     saveAppLockConfig(newConfig);
   };
 
-  // Auto-lock when user backgrounds or leaves the app on mobile APK
+  // Track tab changes & backgrounding: unlocked for unlimited time on same tab; locks if away for >= 10 minutes
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        const config = getAppLockConfig();
-        if (config?.enabled && config?.pin) {
-          sessionStorage.setItem('ag_app_background_time', String(Date.now()));
-        }
-      } else if (document.visibilityState === 'visible') {
-        const config = getAppLockConfig();
-        if (config?.enabled && config?.pin) {
-          const bgTime = Number(sessionStorage.getItem('ag_app_background_time') || 0);
-          const lockTimeoutMs = (config.autoLockMinutes || 0) * 60 * 1000;
-          if (Date.now() - bgTime >= lockTimeoutMs) {
+    const handleHidden = () => {
+      const config = getAppLockConfig();
+      if (config?.enabled && config?.pin) {
+        const now = Date.now();
+        sessionStorage.setItem('ag_tab_hidden_time', String(now));
+        localStorage.setItem('ag_tab_hidden_time', String(now));
+      }
+    };
+
+    const handleVisible = () => {
+      const config = getAppLockConfig();
+      if (config?.enabled && config?.pin) {
+        const hiddenTimeStr = sessionStorage.getItem('ag_tab_hidden_time') || localStorage.getItem('ag_tab_hidden_time');
+        if (hiddenTimeStr) {
+          const hiddenTime = Number(hiddenTimeStr);
+          const awayDurationMs = Date.now() - hiddenTime;
+          const lockTimeoutMs = (config.autoLockMinutes ?? 10) * 60 * 1000;
+
+          // Require password again ONLY if user was away from this tab for >= 10 minutes
+          if (awayDurationMs >= lockTimeoutMs) {
             setIsAppLocked(true);
+            sessionStorage.removeItem('ag_app_unlocked');
           }
         }
+      }
+      // Reset departure timestamps when back on active tab
+      sessionStorage.removeItem('ag_tab_hidden_time');
+      localStorage.removeItem('ag_tab_hidden_time');
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleHidden();
+      } else if (document.visibilityState === 'visible') {
+        handleVisible();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleHidden);
+    window.addEventListener('focus', handleVisible);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleHidden);
+      window.removeEventListener('focus', handleVisible);
+    };
   }, []);
 
   // Account Revocation & Security Notice Modal State
@@ -1331,7 +1373,9 @@ export default function App() {
         isLocked={isAppLocked}
         onUnlock={() => {
           setIsAppLocked(false);
-          sessionStorage.removeItem('ag_app_background_time');
+          sessionStorage.setItem('ag_app_unlocked', 'true');
+          sessionStorage.removeItem('ag_tab_hidden_time');
+          localStorage.removeItem('ag_tab_hidden_time');
         }}
         configuredPin={appLockConfig.pin}
         currentUser={currentUser}

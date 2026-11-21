@@ -347,14 +347,19 @@ export async function clearAllLocalDeviceData() {
   return true;
 }
 
-// App Lock settings
+// App Lock settings (Defaults to 10 minutes timeout when switching or closing tabs)
 export function getAppLockConfig() {
   try {
     const raw = localStorage.getItem('ag_app_lock_config');
-    if (!raw) return { enabled: false, pin: '', autoLockMinutes: 0 };
-    return JSON.parse(raw);
+    if (!raw) return { enabled: false, pin: '', autoLockMinutes: 10 };
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: Boolean(parsed.enabled),
+      pin: parsed.pin || '',
+      autoLockMinutes: typeof parsed.autoLockMinutes === 'number' ? parsed.autoLockMinutes : 10
+    };
   } catch (e) {
-    return { enabled: false, pin: '', autoLockMinutes: 0 };
+    return { enabled: false, pin: '', autoLockMinutes: 10 };
   }
 }
 

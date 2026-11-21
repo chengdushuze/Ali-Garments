@@ -58,9 +58,12 @@
 ## 6. Mobile PWA & Android APK UI Standards
 - **Startup Screen:** The app must **ALWAYS** launch on the **Main / Home screen** (Parties Directory and Dashboard Stats). NEVER default to a specific customer (such as "4 Season G9") on launch.
 - **Sticky Transaction Buttons:** In `CustomerDetail.jsx`, the **"You Gave" (ادھار دیا)** and **"You Got" (وصولی ملی)** action buttons must be sticky/pinned at the bottom of the screen (above mobile navigation) so the user never has to scroll through transaction feeds to record an entry.
-- **App Lock Screen:**
+- **Smooth Theme Transitions:** Changing between Light and Dark mode must transition smoothly (280ms cubic-bezier transition on background, text, and border colors) across both web and native APK surfaces without jarring flashes or snaps.
+- **App Lock Screen & Tab Departure Policy:**
   - Keypad numbers must be ultra-smooth with `touch-action: manipulation`, fast pointerdown response, and haptic feedback (no 300ms mobile touch delay).
   - Enforce Android-style rate limiting: 5 failed attempts locks the screen for 30 seconds with a real-time countdown timer.
+  - **Unlimited Time on Active Tab:** When unlocked, the user can stay on the active tab for unlimited time without being locked out.
+  - **10-Minute Tab Departure Timeout:** If the user switches tabs, minimizes the app, or closes the tab for 10 minutes or more, the App Lock automatically triggers, requiring PIN/password entry upon return. Returning within 10 minutes remains unlocked.
 - **Settings Screen:** On mobile screens, Settings must open as a clean full-screen view (never a cramped popup). No D1 database keys may be shown.
 
 ---

@@ -790,7 +790,7 @@ export default function SettingsModal({
                           const updated = {
                             enabled: true,
                             pin: newPin,
-                            autoLockMinutes: appLockConfig.autoLockMinutes || 0,
+                            autoLockMinutes: typeof appLockConfig.autoLockMinutes === 'number' ? appLockConfig.autoLockMinutes : 10,
                           };
                           onSaveAppLockConfig(updated);
                           setIsChangingPin(false);
@@ -810,11 +810,11 @@ export default function SettingsModal({
                 /* App Lock Options when already enabled */
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-4">
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                      Auto-Lock Delay When Minimized
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                      Auto-Lock Timeout When Leaving / Changing Tab
                     </label>
                     <select
-                      value={appLockConfig.autoLockMinutes || 0}
+                      value={typeof appLockConfig.autoLockMinutes === 'number' ? appLockConfig.autoLockMinutes : 10}
                       onChange={e => {
                         const updated = {
                           ...appLockConfig,
@@ -825,10 +825,15 @@ export default function SettingsModal({
                       }}
                       className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium"
                     >
-                      <option value={0}>Immediately when minimizing or leaving app</option>
-                      <option value={1}>After 1 minute in background</option>
-                      <option value={5}>After 5 minutes in background</option>
+                      <option value={10}>After 10 minutes away from tab (Standard / Recommended)</option>
+                      <option value={5}>After 5 minutes away from tab</option>
+                      <option value={15}>After 15 minutes away from tab</option>
+                      <option value={30}>After 30 minutes away from tab</option>
+                      <option value={0}>Immediately when minimizing or leaving tab</option>
                     </select>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
+                      Unlocked for unlimited time while you stay on this tab. If you switch tabs or leave for 10 minutes, you will be prompted for your PIN upon return.
+                    </p>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
