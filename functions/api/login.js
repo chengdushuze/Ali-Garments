@@ -60,10 +60,10 @@ export async function onRequestPost(context) {
     }
 
     // Handle immediate lock reset request if called
-    if (resetLock && cleanEmail) {
+    if (resetLock) {
       if (env.DB) {
         await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ? OR identifier = ?')
-          .bind(cleanEmail, clientIp)
+          .bind(cleanEmail || 'client', clientIp)
           .run()
           .catch(() => {});
       }
@@ -81,30 +81,42 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Enforce 15-Minute / 3-Attempt Rate Limiter (tracks failed attempts by email)
+    // Enforce 15-Minute / 3-Attempt Rate Limiter (Per-IP and Per-Email tracking)
     if (env.DB) {
       await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
         .bind(cutoff)
         .run()
         .catch(() => {});
 
-      const stats = await env.DB.prepare(
+      // 1. Rate limit check per IP address
+      const ipStats = await env.DB.prepare(
+        'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
+      )
+        .bind(clientIp, cutoff)
+        .first();
+
+      // 2. Rate limit check per Email
+      const emailStats = await env.DB.prepare(
         'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
       )
         .bind(cleanEmail, cutoff)
         .first();
 
-      const failedCount = Number(stats?.total || 0);
-      const oldestAttemptTime = stats?.oldest ? Number(stats.oldest) : null;
+      const ipFailedCount = Number(ipStats?.total || 0);
+      const emailFailedCount = Number(emailStats?.total || 0);
+      const isIpBlocked = ipFailedCount >= RATE_LIMIT_MAX_ATTEMPTS;
+      const isEmailBlocked = emailFailedCount >= RATE_LIMIT_MAX_ATTEMPTS;
 
-      if (failedCount >= RATE_LIMIT_MAX_ATTEMPTS) {
-        const waitRemainingMs = oldestAttemptTime ? Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now) : RATE_LIMIT_WINDOW_MS;
+      if (isIpBlocked || isEmailBlocked) {
+        const oldestAttemptTime = isIpBlocked ? Number(ipStats?.oldest || now) : Number(emailStats?.oldest || now);
+        const waitRemainingMs = Math.max(0, (oldestAttemptTime + RATE_LIMIT_WINDOW_MS) - now);
         const minutesRemaining = Math.max(1, Math.ceil(waitRemainingMs / 60000));
 
         return new Response(
           JSON.stringify({
             error: `Too many failed login attempts (3 maximum) For your security login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}`,
             isRateLimited: true,
+            isIpRateLimited: isIpBlocked,
             retryAfterMinutes: minutesRemaining,
             remainingAttempts: 0
           }),
@@ -163,11 +175,11 @@ export async function onRequestPost(context) {
       isValid = await verifyPassword(password, user.password_hash);
     }
 
-    // If invalid credentials or user not found, record attempt and return error with NO dot
+    // If invalid credentials or user not found, record attempt for BOTH IP and email
     if (!user || !isValid) {
       if (env.DB) {
-        await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?)')
-          .bind(cleanEmail, now)
+        await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?), (?, ?)')
+          .bind(clientIp, now, cleanEmail, now)
           .run()
           .catch(() => {});
       }
