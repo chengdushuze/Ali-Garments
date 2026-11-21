@@ -40,10 +40,11 @@ Thumbs.db
 .wrangler/
 .mf/
 
-# Temporary data files
+# Backup & Temporary data files
 scratch/
 .temp/
-cloud-backup/dumps/
+cloud-backup/
+*.backup
 
 # APK & Build Binaries
 *.apk
