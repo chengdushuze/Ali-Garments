@@ -29,9 +29,12 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
 
-  // Password reset state for a specific user
+  // Password reset state for a specific user (or admin) with consent verification
   const [passwordResetUser, setPasswordResetUser] = useState(null);
+  const [adminVerificationPassword, setAdminVerificationPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -168,18 +171,30 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // 3. Change User Password Handler
+  // 3. Change User or Admin Password Handler with Admin Password Consent Verification
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setPasswordError('');
 
-    if (!passwordResetUser || !newPassword) {
+    if (!passwordResetUser) return;
+
+    if (!adminVerificationPassword) {
+      setPasswordError('You must enter your current admin password to verify consent.');
+      return;
+    }
+
+    if (!newPassword) {
       setPasswordError('Please enter a new password.');
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordError('Password must be at least 6 characters.');
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('New passwords do not match. Please re-enter.');
       return;
     }
 
@@ -191,6 +206,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
         body: JSON.stringify({
           id: passwordResetUser.id,
           newPassword,
+          adminPassword: adminVerificationPassword,
         }),
       });
 
@@ -202,13 +218,18 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
         return;
       }
 
+      const isSelf = passwordResetUser.id === currentUser?.id;
       setStatusMessage({
         type: 'success',
-        text: `Password for "${passwordResetUser.name}" (${passwordResetUser.email}) was successfully changed!`,
+        text: isSelf
+          ? 'Your administrator password has been updated successfully! Please remember it for future logins.'
+          : `Password for "${passwordResetUser.name}" (${passwordResetUser.email}) was successfully changed!`,
       });
 
       setPasswordResetUser(null);
       setNewPassword('');
+      setConfirmNewPassword('');
+      setAdminVerificationPassword('');
     } catch (err) {
       console.error('Change password error:', err);
       setPasswordError('Failed to connect to server. Please try again.');
@@ -516,12 +537,23 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                           <button
                             onClick={() => {
                               setPasswordResetUser(u);
+                              setAdminVerificationPassword('');
                               setNewPassword('');
+                              setConfirmNewPassword('');
                               setPasswordError('');
+                              setShowAdminPassword(false);
                               setShowNewPassword(false);
                             }}
-                            title={`Change Password for ${u.name}`}
-                            className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-950/40 transition-colors cursor-pointer"
+                            title={
+                              isSelf
+                                ? 'Change Your Admin Password'
+                                : `Change Password for ${u.name}`
+                            }
+                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                              isSelf
+                                ? 'text-amber-400 bg-amber-950/30 hover:bg-amber-950/60'
+                                : 'text-slate-400 hover:text-amber-400 hover:bg-amber-950/40'
+                            }`}
                           >
                             <Key className="w-4 h-4" />
                           </button>
@@ -553,32 +585,46 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           </div>
         </div>
 
-        {/* Change Password Dialog Overlay */}
+        {/* Change Password Dialog Overlay with Admin Consent Verification */}
         {passwordResetUser && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
                     <Key className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white text-base">Change User Password</h4>
-                    <p className="text-xs text-slate-400">
-                      {passwordResetUser.name} ({passwordResetUser.email})
+                    <h4 className="font-bold text-white text-base">
+                      {passwordResetUser.id === currentUser?.id
+                        ? 'Change Your Admin Password'
+                        : `Change Password for ${passwordResetUser.name}`}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-mono truncate max-w-[260px]">
+                      {passwordResetUser.email}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => {
                     setPasswordResetUser(null);
+                    setAdminVerificationPassword('');
                     setNewPassword('');
+                    setConfirmNewPassword('');
                     setPasswordError('');
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+
+              {/* Security Notice */}
+              <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/50 text-amber-300 text-xs flex items-start gap-2">
+                <Shield className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                <span className="leading-relaxed">
+                  Security Check: To prevent unauthorized tampering, you must enter your current administrator password to authorize this password change.
+                </span>
               </div>
 
               {passwordError && (
@@ -588,21 +634,46 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                 </div>
               )}
 
-              <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <form onSubmit={handleUpdatePassword} className="space-y-3.5">
+                {/* 1. Admin Verification Password */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-amber-400 mb-1">
+                    Your Current Admin Password (Required)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      value={adminVerificationPassword}
+                      onChange={(e) => setAdminVerificationPassword(e.target.value)}
+                      placeholder="Enter your active admin password"
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-amber-500/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. New Password */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
                     New Password (min 6 characters)
                   </label>
                   <div className="relative">
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       required
-                      autoFocus
                       minLength={6}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password"
-                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     <button
                       type="button"
@@ -614,12 +685,30 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                {/* 3. Confirm New Password */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Re-type new password"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => {
                       setPasswordResetUser(null);
+                      setAdminVerificationPassword('');
                       setNewPassword('');
+                      setConfirmNewPassword('');
                       setPasswordError('');
                     }}
                     className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
@@ -634,12 +723,12 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     {isUpdatingPassword ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Updating...</span>
+                        <span>Verifying & Updating...</span>
                       </>
                     ) : (
                       <>
                         <Key className="w-3.5 h-3.5" />
-                        <span>Update Password</span>
+                        <span>Confirm & Change Password</span>
                       </>
                     )}
                   </button>

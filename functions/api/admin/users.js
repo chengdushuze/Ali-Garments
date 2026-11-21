@@ -1,4 +1,4 @@
-import { verifySessionToken, hashPassword } from '../_auth.js';
+import { verifySessionToken, hashPassword, verifyPassword } from '../_auth.js';
 
 async function getAdminSession(request, env) {
   const cookieHeader = request.headers.get('Cookie') || '';
@@ -226,7 +226,7 @@ export async function onRequestDelete(context) {
   }
 }
 
-// PATCH /api/admin/users - Change user password
+// PATCH /api/admin/users - Change user or admin password with admin consent verification
 export async function onRequestPatch(context) {
   const { request, env } = context;
   const session = await getAdminSession(request, env);
@@ -246,22 +246,70 @@ export async function onRequestPatch(context) {
   }
 
   try {
-    const { id, newPassword } = await request.json().catch(() => ({}));
+    const { id, newPassword, adminPassword } = await request.json().catch(() => ({}));
 
-    if (!id || !newPassword) {
-      return new Response(JSON.stringify({ error: 'User ID and new password are required.' }), {
+    if (!id || !newPassword || !adminPassword) {
+      return new Response(JSON.stringify({ error: 'User ID, new password, and current admin verification password are required.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (newPassword.length < 6) {
-      return new Response(JSON.stringify({ error: 'Password must be at least 6 characters long.' }), {
+      return new Response(JSON.stringify({ error: 'New password must be at least 6 characters long.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // 1. Fetch current admin's stored password hash to verify consent
+    let currentAdmin = null;
+    if (env.DB) {
+      currentAdmin = await env.DB.prepare('SELECT id, email, password_hash FROM users WHERE id = ?')
+        .bind(session.userId)
+        .first();
+      // Fallback by email if id changed
+      if (!currentAdmin && session.email) {
+        currentAdmin = await env.DB.prepare('SELECT id, email, password_hash FROM users WHERE email = ?')
+          .bind(session.email)
+          .first();
+      }
+    } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.CF_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sql: 'SELECT id, email, password_hash FROM users WHERE id = ?',
+          params: [session.userId],
+        }),
+      });
+      const data = await res.json();
+      currentAdmin = data?.result?.[0]?.results?.[0];
+    }
+
+    if (!currentAdmin || !currentAdmin.password_hash) {
+      return new Response(JSON.stringify({ error: 'Admin identity could not be verified in database.' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 2. Cryptographically verify the admin's password before allowing ANY password change
+    const isConsentValid = await verifyPassword(adminPassword, currentAdmin.password_hash);
+    if (!isConsentValid) {
+      // 500ms delay to thwart brute-force attempts
+      await new Promise((r) => setTimeout(r, 500));
+      return new Response(JSON.stringify({ error: 'Incorrect admin verification password. Action denied.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 3. Hash new password and update the targeted user (user or admin)
     const passwordHash = await hashPassword(newPassword);
 
     if (env.DB) {
@@ -290,7 +338,7 @@ export async function onRequestPatch(context) {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Password updated successfully.',
+        message: 'Password successfully updated after verified admin authorization.',
       }),
       {
         status: 200,
