@@ -15,6 +15,7 @@ import SettingsModal from './components/SettingsModal';
 import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
 import PhoneBottomNav from './components/PhoneBottomNav';
+import AppLockScreen from './components/AppLockScreen';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 import {
   getSettings,
@@ -31,7 +32,10 @@ import {
   saveRecycleBin,
   getCachedAuthUser,
   setCachedAuthUser,
-  clearCachedAuthUser
+  clearCachedAuthUser,
+  clearAllLocalDeviceData,
+  getAppLockConfig,
+  saveAppLockConfig
 } from './services/storage';
 import {
   syncCustomerToD1,
@@ -108,6 +112,42 @@ export default function App() {
     verifyAuth();
   }, []);
 
+  // App Lock State (for Android APK and mobile devices)
+  const [appLockConfig, setAppLockConfig] = useState(() => getAppLockConfig());
+  const [isAppLocked, setIsAppLocked] = useState(() => {
+    const c = getAppLockConfig();
+    return Boolean(c && c.enabled && c.pin);
+  });
+
+  const handleSaveAppLockConfig = (newConfig) => {
+    setAppLockConfig(newConfig);
+    saveAppLockConfig(newConfig);
+  };
+
+  // Auto-lock when user backgrounds or leaves the app on mobile APK
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        const config = getAppLockConfig();
+        if (config?.enabled && config?.pin) {
+          sessionStorage.setItem('ag_app_background_time', String(Date.now()));
+        }
+      } else if (document.visibilityState === 'visible') {
+        const config = getAppLockConfig();
+        if (config?.enabled && config?.pin) {
+          const bgTime = Number(sessionStorage.getItem('ag_app_background_time') || 0);
+          const lockTimeoutMs = (config.autoLockMinutes || 0) * 60 * 1000;
+          if (Date.now() - bgTime >= lockTimeoutMs) {
+            setIsAppLocked(true);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   // Real-time Active Session Watcher: Kicks out suspended users immediately & syncs role changes
   useEffect(() => {
     if (!currentUser || currentUser.role === 'super_admin') return;
@@ -117,10 +157,7 @@ export default function App() {
         const res = await apiFetch('/api/me');
         const data = await res.json().catch(() => ({}));
         if (res.status === 403 || data.isSuspended) {
-          clearStoredToken();
-          await clearCachedAuthUser();
-          setCurrentUser(null);
-          alert(data.error || 'Your account has been temporarily suspended by an administrator.');
+          await handleLogout();
         } else if (res.ok && data.user) {
           if (data.user.role !== currentUser.role) {
             setCurrentUser(data.user);
@@ -133,6 +170,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser]);
 
+  // Complete Local Device Wipe upon Logout (removes all cached business & personal data)
   const handleLogout = async () => {
     try {
       await apiFetch('/api/logout', { method: 'POST' });
@@ -140,8 +178,16 @@ export default function App() {
       console.error('Logout error:', e);
     }
     clearStoredToken();
-    await clearCachedAuthUser();
+    await clearAllLocalDeviceData();
     setCurrentUser(null);
+    setCustomers([]);
+    setTransactionsMap({});
+    setRecycleBinItems([]);
+    setInvoices([]);
+    setSelectedCustomer(null);
+    setIsAdminPanelOpen(false);
+    setIsRecycleBinOpen(false);
+    setIsSettingsOpen(false);
   };
 
   // Sync state
@@ -845,7 +891,7 @@ export default function App() {
         currency={settings.currency || 'Rs.'}
       />
 
-      {/* 4. Settings Modal (D1 Database, Company, Logo, QR, Backup) */}
+      {/* 4. Settings Modal (D1 Database, Company, Logo, QR, Backup, App Lock) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -854,6 +900,9 @@ export default function App() {
         onDownloadAllExcel={handleDownloadAllExcel}
         customers={customers}
         transactionsMap={transactionsMap}
+        appLockConfig={appLockConfig}
+        onSaveAppLockConfig={handleSaveAppLockConfig}
+        onTriggerAppLock={() => setIsAppLocked(true)}
       />
 
       {/* 5. Recycle Bin Modal (30-Day Auto Retention & Multi-Device Sync) */}
@@ -865,6 +914,7 @@ export default function App() {
         onPermanentDelete={handlePermanentDeleteFromBin}
         onEmptyBin={handleEmptyRecycleBin}
         onRefreshFromD1={handleRefreshRecycleBin}
+        currentUser={currentUser}
         currency={settings.currency || 'Rs.'}
       />
 
@@ -906,6 +956,17 @@ export default function App() {
           setSelectedCustomer(null);
           setMobileTab('parties');
         }}
+      />
+
+      {/* 9. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
+      <AppLockScreen
+        isLocked={isAppLocked}
+        onUnlock={() => {
+          setIsAppLocked(false);
+          sessionStorage.removeItem('ag_app_background_time');
+        }}
+        configuredPin={appLockConfig.pin}
+        currentUser={currentUser}
       />
     </div>
   );

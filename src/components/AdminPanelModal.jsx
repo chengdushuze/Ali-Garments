@@ -41,6 +41,27 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
 
+  // Admin Security Gate Unlock state (requires administrator password to view/access panel)
+  const [isGateUnlocked, setIsGateUnlocked] = useState(false);
+  const [gatePassword, setGatePassword] = useState('');
+  const [showGatePassword, setShowGatePassword] = useState(false);
+  const [isVerifyingGate, setIsVerifyingGate] = useState(false);
+  const [gateError, setGateError] = useState('');
+
+  // Role Change Modal state (Website own popup - Zero Chrome popups!)
+  const [roleChangeTarget, setRoleChangeTarget] = useState(null); // { user, targetRole }
+  const [roleSuperAdminPassword, setRoleSuperAdminPassword] = useState('');
+  const [showRoleSuperAdminPassword, setShowRoleSuperAdminPassword] = useState(false);
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [roleError, setRoleError] = useState('');
+
+  // Delete User Modal state (Website own popup - Zero Chrome popups!)
+  const [deleteUserTarget, setDeleteUserTarget] = useState(null);
+  const [deleteUserPassword, setDeleteUserPassword] = useState('');
+  const [showDeleteUserPassword, setShowDeleteUserPassword] = useState(false);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteUserError, setDeleteUserError] = useState('');
+
   // Password reset state for a specific user (or admin) with consent verification
   const [passwordResetUser, setPasswordResetUser] = useState(null);
   const [adminVerificationPassword, setAdminVerificationPassword] = useState('');
@@ -102,7 +123,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // Fetch users when modal opens
+  // Fetch users when modal opens and gate is unlocked
   const fetchUsers = async () => {
     setIsLoadingUsers(true);
     try {
@@ -134,14 +155,64 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
+  // Reset lock state whenever modal closes
   useEffect(() => {
-    if (isOpen && (currentUser?.role === 'admin' || currentUser?.role === 'super_admin')) {
-      fetchUsers();
-      fetchBackupInfo();
+    if (!isOpen) {
+      setIsGateUnlocked(false);
+      setGatePassword('');
+      setGateError('');
+      setRoleChangeTarget(null);
+      setDeleteUserTarget(null);
       setStatusMessage({ type: '', text: '' });
       setBackupStatus(null);
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setIsGateUnlocked(false);
+    setGatePassword('');
+    setGateError('');
+    setRoleChangeTarget(null);
+    setDeleteUserTarget(null);
+    onClose();
+  };
+
+  const handleUnlockAdminGate = async (e) => {
+    e.preventDefault();
+    if (!gatePassword) {
+      setGateError('Please enter your administrator password.');
+      return;
+    }
+
+    setIsVerifyingGate(true);
+    setGateError('');
+
+    try {
+      const res = await apiFetch('/api/admin/verify-admin-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: gatePassword,
+          action: 'admin_gate',
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setGateError(data.error || 'Incorrect administrator password. Access denied.');
+        return;
+      }
+
+      setIsGateUnlocked(true);
+      setGatePassword('');
+      fetchUsers();
+      fetchBackupInfo();
+    } catch (err) {
+      setGateError('Network connection error during verification. Please try again.');
+    } finally {
+      setIsVerifyingGate(false);
+    }
+  };
 
   // Strict Security Guard: Only users with role === 'admin' or 'super_admin' can render the Admin Panel
   if (!isOpen || (currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin')) return null;
@@ -206,54 +277,77 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // 2. Remove / Delete User Handler
-  const handleDeleteUser = async (user) => {
+  // 2. Remove / Delete User Handlers (Website own popup - Zero Chrome popups)
+  const handleInitiateDeleteUser = (user) => {
     if (user.id === currentUser?.id) {
-      alert('You cannot remove your own active administrator account.');
+      setStatusMessage({ type: 'error', text: 'You cannot remove your own active administrator account.' });
       return;
     }
 
     if (user.role === 'super_admin') {
-      alert('Super Admin account is permanently protected and cannot be deleted by any administrator.');
+      setStatusMessage({ type: 'error', text: 'Super Admin account is permanently protected and cannot be deleted.' });
       return;
     }
 
-    const confirmDelete = window.confirm(
-      `Are you sure you want to permanently remove user "${user.name}" (${user.email})?`
-    );
-    if (!confirmDelete) return;
+    setDeleteUserTarget(user);
+    setDeleteUserPassword('');
+    setDeleteUserError('');
+    setShowDeleteUserPassword(false);
+  };
 
-    setDeletingUserId(user.id);
-    setStatusMessage({ type: '', text: '' });
+  const handleConfirmDeleteUser = async (e) => {
+    e.preventDefault();
+    if (!deleteUserTarget) return;
+
+    if (!deleteUserPassword) {
+      setDeleteUserError('Please enter your administrator password to authorize deletion.');
+      return;
+    }
+
+    setIsDeletingUser(true);
+    setDeleteUserError('');
 
     try {
-      const res = await apiFetch(`/api/admin/users?id=${user.id}`, {
+      // 1. Verify admin password via backend
+      const verifyRes = await apiFetch('/api/admin/verify-admin-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: deleteUserPassword,
+          action: 'admin_gate',
+        }),
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok || !verifyData.success) {
+        setDeleteUserError(verifyData.error || 'Incorrect password. Deletion authorization failed.');
+        setIsDeletingUser(false);
+        return;
+      }
+
+      // 2. Delete user
+      const res = await apiFetch(`/api/admin/users?id=${deleteUserTarget.id}`, {
         method: 'DELETE',
       });
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        setStatusMessage({
-          type: 'error',
-          text: data.error || 'Failed to remove user account.',
-        });
-        setDeletingUserId(null);
+        setDeleteUserError(data.error || 'Failed to remove user account.');
+        setIsDeletingUser(false);
         return;
       }
 
-      setUsersList((prev) => prev.filter((u) => u.id !== user.id));
+      setUsersList((prev) => prev.filter((u) => u.id !== deleteUserTarget.id));
       setStatusMessage({
         type: 'success',
-        text: `User account "${user.name}" was successfully removed.`,
+        text: `User account "${deleteUserTarget.name}" (${deleteUserTarget.email}) was successfully removed.`,
       });
+      setDeleteUserTarget(null);
+      setDeleteUserPassword('');
     } catch (err) {
       console.error('Delete user error:', err);
-      setStatusMessage({
-        type: 'error',
-        text: 'Failed to connect. Please try again.',
-      });
+      setDeleteUserError('Failed to connect to server. Please try again.');
     } finally {
-      setDeletingUserId(null);
+      setIsDeletingUser(false);
     }
   };
 
@@ -376,38 +470,57 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // 5. Change User Role Handler (Super Admin Only)
-  const handleRoleChange = async (user, targetRole) => {
-    const roleLabel = targetRole === 'admin' ? 'Administrator' : 'Standard User';
-    const confirmPrompt = window.confirm(`Are you sure you want to change ${user.name}'s role to ${roleLabel}?`);
-    if (!confirmPrompt) return;
+  // 5. Change User Role Handlers (Website own popup - Zero Chrome popups)
+  const handleInitiateRoleChange = (user, targetRole) => {
+    setRoleChangeTarget({ user, targetRole });
+    setRoleSuperAdminPassword('');
+    setRoleError('');
+    setShowRoleSuperAdminPassword(false);
+  };
 
-    const superAdminPassword = prompt(`Please enter your Super Admin password to authorize changing ${user.name}'s role to ${roleLabel}:`);
-    if (!superAdminPassword) return;
+  const handleConfirmRoleChange = async (e) => {
+    e.preventDefault();
+    if (!roleChangeTarget) return;
+
+    if (!roleSuperAdminPassword) {
+      setRoleError('Please enter your Super Admin password to authorize role change.');
+      return;
+    }
+
+    setIsUpdatingRole(true);
+    setRoleError('');
+
+    const roleLabel = roleChangeTarget.targetRole === 'admin' ? 'Administrator' : 'Standard User';
 
     try {
       const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: user.id,
-          role: targetRole,
-          adminPassword: superAdminPassword,
+          id: roleChangeTarget.user.id,
+          role: roleChangeTarget.targetRole,
+          adminPassword: roleSuperAdminPassword,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        alert(data.error || 'Failed to update user role.');
-      } else {
-        setStatusMessage({
-          type: 'success',
-          text: `Role for "${user.name}" (${user.email}) successfully changed to ${roleLabel}!`,
-        });
-        fetchUsers();
+        setRoleError(data.error || 'Failed to update user role.');
+        return;
       }
+
+      setStatusMessage({
+        type: 'success',
+        text: `Role for "${roleChangeTarget.user.name}" (${roleChangeTarget.user.email}) successfully changed to ${roleLabel}!`,
+      });
+      setRoleChangeTarget(null);
+      setRoleSuperAdminPassword('');
+      fetchUsers();
     } catch (err) {
-      alert('Network error while updating user role.');
+      console.error('Role update error:', err);
+      setRoleError('Network error while updating user role. Please try again.');
+    } finally {
+      setIsUpdatingRole(false);
     }
   };
 
@@ -524,14 +637,103 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* ADMIN SECURITY GATE: Prompt password before granting access to Admin Panel */}
+        {!isGateUnlocked ? (
+          <div className="p-6 sm:p-10 flex flex-col items-center justify-center max-w-md mx-auto my-6 text-center space-y-5 animate-in fade-in duration-200">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div>
+              <h4 className="text-lg font-black text-white">
+                Admin Panel Security Gate
+              </h4>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Security verification required. Please enter your Administrator password to unlock user accounts, roles, backups, and audit logs.
+              </p>
+            </div>
+
+            <div className="w-full p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2 truncate">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></div>
+                <span className="text-slate-300 font-semibold truncate">{currentUser?.email}</span>
+              </div>
+              <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 shrink-0 font-bold">
+                {currentUser?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+              </span>
+            </div>
+
+            <form onSubmit={handleUnlockAdminGate} className="w-full space-y-4">
+              <div className="text-left">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                  Administrator Password:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showGatePassword ? 'text' : 'password'}
+                    value={gatePassword}
+                    onChange={e => {
+                      setGatePassword(e.target.value);
+                      setGateError('');
+                    }}
+                    placeholder="Enter your account password..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGatePassword(!showGatePassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showGatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {gateError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium text-left">
+                  {gateError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isVerifyingGate}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  {isVerifyingGate ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Unlock Admin Panel</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* Navigation Tabs */}
         <div className="flex items-center gap-1 px-4 sm:px-5 pt-2 border-b border-slate-800 bg-slate-950/40 text-xs overflow-x-auto">
           <button
             type="button"
@@ -768,7 +970,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               {/* Super Admin Role Changer */}
                               {currentUser?.role === 'super_admin' && !isSuper && (
                                 <button
-                                  onClick={() => handleRoleChange(u, u.role === 'admin' ? 'user' : 'admin')}
+                                  onClick={() => handleInitiateRoleChange(u, u.role === 'admin' ? 'user' : 'admin')}
                                   title={u.role === 'admin' ? `Demote ${u.name} to User` : `Promote ${u.name} to Administrator`}
                                   className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border whitespace-nowrap ${
                                     u.role === 'admin'
@@ -857,7 +1059,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
                               {/* Remove User Button */}
                               <button
-                                onClick={() => handleDeleteUser(u)}
+                                onClick={() => handleInitiateDeleteUser(u)}
                                 disabled={isSelf || isDeleting || isSuper}
                                 title={
                                   isSuper
@@ -1533,15 +1735,246 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           </div>
         )}
 
+        {/* Website Own Popup: Role Change Modal (Zero Chrome popups) */}
+        {roleChangeTarget && (
+          <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <Crown className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      Authorize User Role Change
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Super Admin Security Verification
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleChangeTarget(null);
+                    setRoleSuperAdminPassword('');
+                    setRoleError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-500 font-semibold uppercase">Target User:</span>
+                  <span className="font-bold text-white">{roleChangeTarget.user.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-500 font-semibold uppercase">Email:</span>
+                  <span className="font-mono text-slate-400">{roleChangeTarget.user.email}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                  <span className="text-slate-500 font-semibold uppercase">New Role:</span>
+                  <span className={`font-mono font-bold px-2 py-0.5 rounded-md ${
+                    roleChangeTarget.targetRole === 'admin'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                      : 'bg-blue-950 text-blue-300 border border-blue-800/60'
+                  }`}>
+                    {roleChangeTarget.targetRole === 'admin' ? 'Administrator' : 'Standard User'}
+                  </span>
+                </div>
+              </div>
+
+              <form onSubmit={handleConfirmRoleChange} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Super Admin Password:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRoleSuperAdminPassword ? 'text' : 'password'}
+                      value={roleSuperAdminPassword}
+                      onChange={e => {
+                        setRoleSuperAdminPassword(e.target.value);
+                        setRoleError('');
+                      }}
+                      placeholder="Enter Super Admin password..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-amber-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRoleSuperAdminPassword(!showRoleSuperAdminPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showRoleSuperAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {roleError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                    {roleError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRoleChangeTarget(null);
+                      setRoleSuperAdminPassword('');
+                      setRoleError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingRole}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 active:scale-95 text-slate-950 text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isUpdatingRole ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                        <span>Updating Role...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="w-3.5 h-3.5 text-slate-950" />
+                        <span>Authorize Role Change</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Website Own Popup: Delete User Modal (Zero Chrome popups) */}
+        {deleteUserTarget && (
+          <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      Delete User Account
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Permanent Removal Verification
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteUserTarget(null);
+                    setDeleteUserPassword('');
+                    setDeleteUserError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-900/40 text-xs text-rose-300 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  Permanent Removal Warning
+                </p>
+                <p className="leading-relaxed text-slate-300">
+                  Are you sure you want to permanently remove user <strong className="text-white">{deleteUserTarget.name}</strong> ({deleteUserTarget.email})? This user will immediately lose access.
+                </p>
+              </div>
+
+              <form onSubmit={handleConfirmDeleteUser} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Enter Administrator Password:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showDeleteUserPassword ? 'text' : 'password'}
+                      value={deleteUserPassword}
+                      onChange={e => {
+                        setDeleteUserPassword(e.target.value);
+                        setDeleteUserError('');
+                      }}
+                      placeholder="Enter administrator password..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-rose-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteUserPassword(!showDeleteUserPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {showDeleteUserPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {deleteUserError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                    {deleteUserError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteUserTarget(null);
+                      setDeleteUserPassword('');
+                      setDeleteUserError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isDeletingUser}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    {isDeletingUser ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Confirm & Delete User</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex justify-end">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors cursor-pointer"
           >
             Close
           </button>
         </div>
+      </>
+    )}
       </div>
     </div>
   );

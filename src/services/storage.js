@@ -322,3 +322,50 @@ export async function clearCachedAuthUser() {
     return false;
   }
 }
+
+/**
+ * Completely purges all cached business and personal data from the local device
+ * upon user logout or session termination, preventing unauthorized device access.
+ */
+export async function clearAllLocalDeviceData() {
+  try {
+    await localforage.clear();
+  } catch (e) {
+    console.error('Error clearing IndexedDB / localforage:', e);
+  }
+
+  try {
+    // Preserve only app lock settings if user wants PIN preserved across logins,
+    // or clear everything if strict mode:
+    const appLockSettings = localStorage.getItem('ag_app_lock_config');
+    localStorage.clear();
+    sessionStorage.clear();
+    if (appLockSettings) {
+      localStorage.setItem('ag_app_lock_config', appLockSettings);
+    }
+  } catch (e) {
+    console.error('Error clearing localStorage/sessionStorage:', e);
+  }
+
+  return true;
+}
+
+// App Lock settings
+export function getAppLockConfig() {
+  try {
+    const raw = localStorage.getItem('ag_app_lock_config');
+    if (!raw) return { enabled: false, pin: '', autoLockMinutes: 0 };
+    return JSON.parse(raw);
+  } catch (e) {
+    return { enabled: false, pin: '', autoLockMinutes: 0 };
+  }
+}
+
+export function saveAppLockConfig(config) {
+  try {
+    localStorage.setItem('ag_app_lock_config', JSON.stringify(config));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}

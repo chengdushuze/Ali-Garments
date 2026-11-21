@@ -15,7 +15,11 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Clock,
-  HardDriveDownload
+  HardDriveDownload,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound
 } from 'lucide-react';
 import { executeD1Query, initD1Tables } from '../services/d1Sync';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
@@ -28,11 +32,22 @@ export default function SettingsModal({
   onSaveSettings,
   onDownloadAllExcel,
   customers,
-  transactionsMap
+  transactionsMap,
+  appLockConfig = { enabled: false, pin: '', autoLockMinutes: 0 },
+  onSaveAppLockConfig,
+  onTriggerAppLock
 }) {
-  const [activeTab, setActiveTab] = useState('d1'); // 'd1', 'company', 'payments', 'backup'
+  const [activeTab, setActiveTab] = useState('d1'); // 'd1', 'company', 'payments', 'backup', 'app_lock'
   const [formData, setFormData] = useState({ ...settings });
   const [testStatus, setTestStatus] = useState(null); // { loading, success, message }
+
+  // App Lock Form State
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [currentPinCheck, setCurrentPinCheck] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [appLockMsg, setAppLockMsg] = useState({ type: '', text: '' });
+  const [showPin, setShowPin] = useState(false);
   const [backupInfo, setBackupInfo] = useState({
     cloudTime: null,
     cloudDetails: null,
@@ -246,6 +261,25 @@ export default function SettingsModal({
           >
             <Download className="w-4 h-4" />
             <span>Backup & Export</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('app_lock');
+              setAppLockMsg({ type: '', text: '' });
+              setIsChangingPin(false);
+              setNewPin('');
+              setConfirmPin('');
+              setCurrentPinCheck('');
+            }}
+            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'app_lock'
+                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Lock className="w-4 h-4 text-emerald-500" />
+            <span>App Lock (APK)</span>
           </button>
         </div>
 
@@ -726,6 +760,230 @@ export default function SettingsModal({
                   className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300"
                 />
               </div>
+            </div>
+          )}
+
+          {/* TAB 5: APP LOCK (APK & Mobile Security) */}
+          {activeTab === 'app_lock' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 space-y-1.5">
+                <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200 font-bold">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>APK & Device Security • App Lock Protection</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
+                  App Lock secures your ALI Garments Khata on this device. Whenever the app opens or resumes from background, a 4-digit PIN is required to unlock your accounts and customer ledgers.
+                </p>
+              </div>
+
+              {appLockMsg.text && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                  appLockMsg.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                }`}>
+                  {appLockMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{appLockMsg.text}</span>
+                </div>
+              )}
+
+              {/* Status Banner */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl ${
+                    appLockConfig.enabled
+                      ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                  }`}>
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white">
+                      {appLockConfig.enabled ? 'App Lock is Active' : 'App Lock is Disabled'}
+                    </h4>
+                    <p className="text-slate-500 text-[11px]">
+                      {appLockConfig.enabled
+                        ? 'Protected with 4-digit PIN on this phone / browser.'
+                        : 'Anyone with this device can open ledgers directly.'}
+                    </p>
+                  </div>
+                </div>
+
+                {appLockConfig.enabled && onTriggerAppLock && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onTriggerAppLock();
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
+                  >
+                    Lock Now
+                  </button>
+                )}
+              </div>
+
+              {/* Configure or Change PIN Form */}
+              {(!appLockConfig.enabled || isChangingPin) ? (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-emerald-500" />
+                    <span>{isChangingPin ? 'Change Security PIN' : 'Set Up New 4-Digit PIN'}</span>
+                  </h4>
+
+                  {isChangingPin && (
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Current PIN
+                      </label>
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        maxLength={4}
+                        placeholder="••••"
+                        value={currentPinCheck}
+                        onChange={e => setCurrentPinCheck(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-lg"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        New 4-Digit PIN
+                      </label>
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        maxLength={4}
+                        placeholder="••••"
+                        value={newPin}
+                        onChange={e => setNewPin(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-lg"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                        Confirm 4-Digit PIN
+                      </label>
+                      <input
+                        type={showPin ? 'text' : 'password'}
+                        maxLength={4}
+                        placeholder="••••"
+                        value={confirmPin}
+                        onChange={e => setConfirmPin(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showPin ? 'Hide PIN Digits' : 'Show PIN Digits'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {isChangingPin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsChangingPin(false);
+                            setAppLockMsg({ type: '', text: '' });
+                          }}
+                          className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isChangingPin && currentPinCheck !== appLockConfig.pin) {
+                            setAppLockMsg({ type: 'error', text: 'Current PIN is incorrect.' });
+                            return;
+                          }
+                          if (newPin.length !== 4) {
+                            setAppLockMsg({ type: 'error', text: 'PIN must be exactly 4 numeric digits.' });
+                            return;
+                          }
+                          if (newPin !== confirmPin) {
+                            setAppLockMsg({ type: 'error', text: 'New PIN and Confirm PIN do not match.' });
+                            return;
+                          }
+                          const updated = {
+                            enabled: true,
+                            pin: newPin,
+                            autoLockMinutes: appLockConfig.autoLockMinutes || 0,
+                          };
+                          onSaveAppLockConfig(updated);
+                          setIsChangingPin(false);
+                          setNewPin('');
+                          setConfirmPin('');
+                          setCurrentPinCheck('');
+                          setAppLockMsg({ type: 'success', text: 'App Lock PIN successfully saved and activated!' });
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+                      >
+                        {isChangingPin ? 'Update PIN' : 'Enable App Lock'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* App Lock Options when already enabled */
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                      Auto-Lock Delay When Minimized
+                    </label>
+                    <select
+                      value={appLockConfig.autoLockMinutes || 0}
+                      onChange={e => {
+                        const updated = {
+                          ...appLockConfig,
+                          autoLockMinutes: Number(e.target.value),
+                        };
+                        onSaveAppLockConfig(updated);
+                        setAppLockMsg({ type: 'success', text: 'Auto-lock policy updated.' });
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium"
+                    >
+                      <option value={0}>Immediately when minimizing or leaving app</option>
+                      <option value={1}>After 1 minute in background</option>
+                      <option value={5}>After 5 minutes in background</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChangingPin(true);
+                        setAppLockMsg({ type: '', text: '' });
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                      Change 4-Digit PIN
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
+                        setAppLockMsg({ type: 'success', text: 'App Lock has been disabled.' });
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold"
+                    >
+                      Turn Off App Lock
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
