@@ -141,11 +141,13 @@ export async function onRequestPost(context) {
       user = data?.result?.[0]?.results?.[0] || null;
     }
 
-    // Check Pakistan-only Geo Restriction (Super Admin always has foreign access)
+    // Check Pakistan-only Geo Restriction (Super Admin & Admin & users with foreign/VPN permission)
     const clientCountry = request.cf?.country; // Undefined in local dev / native requests
     const isSuperAdmin = user && (user.role === 'super_admin' || user.email?.toLowerCase() === 'admin@chengdushuze.com');
+    const isAdmin = user && user.role === 'admin';
+    
     if (clientCountry && clientCountry !== 'PK') {
-      const hasForeignAccess = isSuperAdmin || (user && Number(user.allow_foreign_access) === 1);
+      const hasForeignAccess = isSuperAdmin || isAdmin || (user && (Number(user.allow_foreign_access) === 1 || Number(user.allow_vpn) === 1));
       if (!hasForeignAccess) {
         if (env.DB) {
           try {
@@ -155,7 +157,7 @@ export async function onRequestPost(context) {
               user?.id || null,
               cleanEmail,
               'GEO_BLOCKED',
-              `Login blocked: Access from country '${clientCountry}' denied (User lacks foreign access permission).`,
+              `Login blocked: Access from country '${clientCountry}' denied (User lacks foreign access or VPN permission).`,
               clientIp
             ).run();
           } catch (e) {}
@@ -176,9 +178,10 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Check Strict VPN / Proxy Policy (Super Admin always allowed)
+    // Check Strict VPN / Proxy Policy (Super Admin & Admin & users with allow_vpn = 1)
     if (isVpnOrProxy(request)) {
-      if (!user || (!isSuperAdmin && user.allow_vpn !== 1)) {
+      const isVpnAllowed = isSuperAdmin || isAdmin || (user && Number(user.allow_vpn) === 1);
+      if (!user || !isVpnAllowed) {
         if (env.DB) {
           try {
             await env.DB.prepare(
@@ -266,11 +269,12 @@ export async function onRequestPost(context) {
 
       const message = remaining === 0
         ? 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.'
-        : 'Invalid email or password.';
+        : (user ? 'Wrong password. Please try again.' : 'Invalid email or password.');
 
       return new Response(
         JSON.stringify({
           error: message,
+          isWrongPassword: !!user,
           isRateLimited: remaining === 0,
         }),
         {

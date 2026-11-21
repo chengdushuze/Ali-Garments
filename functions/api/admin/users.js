@@ -86,7 +86,7 @@ export async function onRequestGet(context) {
           'UPDATE users SET role = ?, status = ?, password_hash = ?, allow_foreign_access = 1, allow_vpn = 1 WHERE LOWER(email) = ?'
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
-      await env.DB.prepare("UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role = 'super_admin'").run().catch(() => {});
+      await env.DB.prepare("UPDATE users SET allow_foreign_access = 1, allow_vpn = 1 WHERE role IN ('super_admin', 'admin')").run().catch(() => {});
 
       // Proactively purge and drop legacy password_plain column if present
       await env.DB.prepare('UPDATE users SET password_plain = NULL WHERE password_plain IS NOT NULL').run().catch(() => {});
@@ -617,14 +617,24 @@ export async function onRequestPatch(context) {
       if (env.DB) {
         try {
           await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run();
+          await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run();
         } catch (e) {}
-        await env.DB.prepare('UPDATE users SET allow_vpn = ? WHERE id = ?').bind(vpnVal, id).run();
+        // Commercial VPNs route through foreign exit nodes (e.g., IL, US, SG).
+        // Therefore, allowing VPN access automatically grants foreign access so users aren't blocked by Pakistan geo-fencing!
+        if (vpnVal === 1) {
+          await env.DB.prepare('UPDATE users SET allow_vpn = 1, allow_foreign_access = 1, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(id).run();
+        } else {
+          await env.DB.prepare('UPDATE users SET allow_vpn = 0, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(id).run();
+        }
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+        const sql = vpnVal === 1
+          ? 'UPDATE users SET allow_vpn = 1, allow_foreign_access = 1, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?'
+          : 'UPDATE users SET allow_vpn = 0, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?';
         await fetch(endpoint, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sql: 'UPDATE users SET allow_vpn = ? WHERE id = ?', params: [vpnVal, id] }),
+          body: JSON.stringify({ sql, params: [id] }),
         });
       }
 
@@ -634,7 +644,8 @@ export async function onRequestPatch(context) {
         JSON.stringify({
           success: true,
           allow_vpn: vpnVal,
-          message: `VPN/Proxy access for this user is now ${vpnVal ? 'ALLOWED' : 'BLOCKED'}.`,
+          allow_foreign_access: vpnVal === 1 ? 1 : undefined,
+          message: `VPN/Proxy access for this user is now ${vpnVal ? 'ALLOWED (Foreign VPN routes authorized)' : 'BLOCKED'}.`,
         }),
         {
           status: 200,

@@ -120,7 +120,7 @@ export default function LoginView({ onLoginSuccess }) {
           if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
             setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
           } else {
-            setErrorMessage(data.error || 'Invalid email or password.');
+            setErrorMessage(data.error || 'Wrong password. Please try again.');
           }
           setIsLoading(false);
           return;

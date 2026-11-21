@@ -172,14 +172,27 @@ export async function onRequest(context) {
           const session = await verifySessionToken(token, secret);
           if (session) {
             sessionUserEmail = session.email || 'user';
-            if (session.role === 'super_admin' || session.email?.toLowerCase() === 'admin@chengdushuze.com' || session.allow_foreign_access === 1) {
+            if (
+              session.role === 'super_admin' ||
+              session.role === 'admin' ||
+              session.email?.toLowerCase() === 'admin@chengdushuze.com' ||
+              session.allow_foreign_access === 1 ||
+              session.allow_vpn === 1
+            ) {
               hasForeignAccess = true;
             } else if (env.DB && session.userId) {
-              // Re-check live user record in D1 in case super_admin just granted foreign access
+              // Re-check live user record in D1 in case super_admin just granted foreign/VPN access
               const liveUser = await env.DB.prepare(
-                'SELECT role, email, allow_foreign_access FROM users WHERE id = ?'
+                'SELECT role, email, allow_foreign_access, allow_vpn FROM users WHERE id = ?'
               ).bind(session.userId).first();
-              if (liveUser && (liveUser.role === 'super_admin' || liveUser.email?.toLowerCase() === 'admin@chengdushuze.com' || liveUser.allow_foreign_access === 1)) {
+              if (
+                liveUser &&
+                (liveUser.role === 'super_admin' ||
+                 liveUser.role === 'admin' ||
+                 liveUser.email?.toLowerCase() === 'admin@chengdushuze.com' ||
+                 liveUser.allow_foreign_access === 1 ||
+                 liveUser.allow_vpn === 1)
+              ) {
                 hasForeignAccess = true;
               }
             }
