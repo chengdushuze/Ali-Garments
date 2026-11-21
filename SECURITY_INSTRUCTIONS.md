@@ -37,12 +37,12 @@
 ---
 
 ## 4. Immediate Suspension, Deletion & Auto-Logout Protocol
-- **Suspension Support:** Administrators can suspend users with predefined durations (3 days, 5 days, 7 days, 14 days, 30 days, or indefinite).
+- **Suspension Support:** Administrators can suspend users with predefined durations (1 day, 3 days, 7 days, 15 days, 30 days, or indefinite) and a custom **Suspension Reason** (default: `"We suspected unusual activity on your account."`).
 - **Instant Client Reaction:** When a user is suspended or deleted:
-  - Any API call made by their device returns 401/403 with `isSuspended: true` (including `suspendedDays`) or `isDeleted: true`.
+  - Any API call made by their device returns 401/403 with `isSuspended: true` (including `suspendedDays` and `reason`) or `isDeleted: true`.
   - The client interceptor (`src/services/apiClient.js`) immediately triggers `ag_account_revocation`.
   - The app clears all local tokens and displays a clear popup modal:
-    - *"Account Suspended for X days"* OR *"Account Removed"*.
+    - *"Account Suspended for X days"* with the reason displayed.
   - When dismissed, the user is redirected to the Login Screen.
 
 ---

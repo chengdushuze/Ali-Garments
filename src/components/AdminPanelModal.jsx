@@ -81,6 +81,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isTogglingSuspend, setIsTogglingSuspend] = useState(false);
   const [suspendError, setSuspendError] = useState('');
   const [suspendDurationDays, setSuspendDurationDays] = useState('7');
+  const [suspendReason, setSuspendReason] = useState('We suspected unusual activity on your account.');
 
   // VPN Policy Toggle State
   const [vpnToggleTarget, setVpnToggleTarget] = useState(null);
@@ -460,6 +461,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           id: suspendingUser.id,
           status: targetStatus,
           durationDays: targetStatus === 'suspended' ? Number(suspendDurationDays) : null,
+          suspensionReason: targetStatus === 'suspended' ? (suspendReason.trim() || 'We suspected unusual activity on your account.') : null,
           adminPassword: suspendAdminPassword,
         }),
       });
@@ -481,6 +483,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
       setSuspendingUser(null);
       setSuspendAdminPassword('');
+      setSuspendReason('We suspected unusual activity on your account.');
       fetchUsers();
     } catch (err) {
       console.error('Toggle suspend error:', err);
@@ -1141,6 +1144,12 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                     : 'Active'}
                                 </span>
                               </div>
+                              {u.status === 'suspended' && (
+                                <div className="text-[11px] text-rose-300/90 italic mt-1 flex items-center gap-1.5 font-sans">
+                                  <span className="font-semibold text-rose-400 not-italic font-mono text-[10px] uppercase">Reason:</span>
+                                  <span>{u.suspension_reason || 'We suspected unusual activity on your account.'}</span>
+                                </div>
+                              )}
                               <div className="flex items-center gap-2.5 text-xs text-slate-400 mt-1 flex-wrap">
                                 <span className="font-mono text-slate-300">{u.email}</span>
                                 {u.last_login_ip && (
@@ -1246,6 +1255,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                       setSuspendError('');
                                       setShowSuspendAdminPassword(false);
                                       setSuspendDurationDays('7');
+                                      setSuspendReason(u.suspension_reason || 'We suspected unusual activity on your account.');
                                     }}
                                     title={
                                       u.status === 'suspended'
@@ -1796,6 +1806,25 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       {suspendDurationDays === '0'
                         ? 'User will remain suspended indefinitely until manually reactivated.'
                         : `User will be suspended and automatically reactivated after ${suspendDurationDays} day(s).`}
+                    </p>
+                  </div>
+                )}
+
+                {/* Reason for suspension */}
+                {suspendingUser.status !== 'suspended' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                      Reason for Suspension • معطلی کی وجہ
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={suspendReason}
+                      onChange={(e) => setSuspendReason(e.target.value)}
+                      placeholder="We suspected unusual activity on your account."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Reason shown to user upon login or active session termination.
                     </p>
                   </div>
                 )}

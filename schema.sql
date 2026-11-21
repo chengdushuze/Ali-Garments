@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     allow_foreign_access INTEGER DEFAULT 0, -- 0 = Pakistan Only, 1 = Allow Foreign Access
     token_version INTEGER DEFAULT 1, -- Multi-device session revocation version
     suspended_until INTEGER, -- Epoch ms when suspension expires (NULL = indefinite or active)
+    suspension_reason TEXT, -- Reason for account suspension (e.g. 'We suspected unusual activity on your account.')
     last_login_ip TEXT,
     last_login_device TEXT,
     last_login_at DATETIME,

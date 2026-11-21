@@ -194,7 +194,7 @@ export default function LoginView({ onLoginSuccess }) {
           {errorMessage && (
             <div className="mb-3 p-2.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-              <div className="flex-1 font-medium leading-tight">
+              <div className="flex-1 font-medium leading-tight whitespace-pre-line">
                 {errorMessage}
                 {errorMessage.includes('locked') && (
                   <button

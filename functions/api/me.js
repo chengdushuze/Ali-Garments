@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
   if (env.DB) {
     try {
       liveUser = await env.DB.prepare(
-        `SELECT id, name, email, role, COALESCE(status, 'active') as status, suspended_until, 
+        `SELECT id, name, email, role, COALESCE(status, 'active') as status, suspended_until, suspension_reason, 
                 COALESCE(token_version, 1) as token_version, 
                 COALESCE(allow_vpn, 0) as allow_vpn,
                 COALESCE(allow_foreign_access, 0) as allow_foreign_access 
@@ -43,7 +43,7 @@ export async function onRequestGet(context) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          sql: `SELECT id, name, email, role, COALESCE(status, 'active') as status, suspended_until, 
+          sql: `SELECT id, name, email, role, COALESCE(status, 'active') as status, suspended_until, suspension_reason, 
                        COALESCE(token_version, 1) as token_version, 
                        COALESCE(allow_vpn, 0) as allow_vpn,
                        COALESCE(allow_foreign_access, 0) as allow_foreign_access 
@@ -135,10 +135,13 @@ export async function onRequestGet(context) {
     } else {
       const remainingDays = liveUser.suspended_until ? Math.max(1, Math.ceil((liveUser.suspended_until - Date.now()) / (24 * 60 * 60 * 1000))) : null;
       const untilText = remainingDays ? ` for ${remainingDays} day(s)` : '';
+      const defaultReason = 'We suspected unusual activity on your account.';
+      const reason = liveUser.suspension_reason?.trim() || defaultReason;
       return new Response(
         JSON.stringify({
-          error: `Your account has been temporarily suspended by an administrator${untilText}. Please contact management.`,
+          error: `Your account has been temporarily suspended by an administrator${untilText}.\nReason: ${reason}`,
           isSuspended: true,
+          reason: reason,
           suspendedDays: remainingDays,
           suspendedUntil: liveUser.suspended_until,
         }),

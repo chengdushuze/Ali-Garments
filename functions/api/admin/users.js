@@ -87,6 +87,11 @@ export async function onRequestGet(context) {
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
 
+      // Proactively purge and drop legacy password_plain column if present
+      await env.DB.prepare('UPDATE users SET password_plain = NULL WHERE password_plain IS NOT NULL').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users DROP COLUMN password_plain').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN suspension_reason TEXT').run().catch(() => {});
+
       // Ensure last_login and policy columns exist
       await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_ip TEXT').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_device TEXT').run().catch(() => {});
@@ -95,7 +100,7 @@ export async function onRequestGet(context) {
       await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1').run().catch(() => {});
 
-      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC').all();
+      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, suspension_reason, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC').all();
       users = res.results || [];
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -106,7 +111,7 @@ export async function onRequestGet(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC',
+          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, suspension_reason, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC',
         }),
       });
       const data = await res.json();
@@ -350,7 +355,7 @@ export async function onRequestPatch(context) {
   }
 
   try {
-    const { id, newPassword, status, durationDays, role, allowVpn, allowForeignAccess, adminPassword } = await request.json().catch(() => ({}));
+    const { id, newPassword, status, durationDays, suspensionReason, role, allowVpn, allowForeignAccess, adminPassword } = await request.json().catch(() => ({}));
 
     if (!id || !adminPassword) {
       return new Response(JSON.stringify({ error: 'User ID and admin verification password are required.' }), {
@@ -461,6 +466,7 @@ export async function onRequestPatch(context) {
     if (env.DB && status) {
       try {
         await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
+        await env.DB.prepare("ALTER TABLE users ADD COLUMN suspension_reason TEXT").run();
       } catch (e) {}
     }
 
@@ -546,15 +552,19 @@ export async function onRequestPatch(context) {
       );
     }
 
-    // C) Status Suspension with optional duration in days
+    // C) Status Suspension with optional duration in days & custom suspension reason
     if (status) {
       const safeStatus = status === 'suspended' ? 'suspended' : 'active';
       const days = (durationDays && Number(durationDays) > 0) ? Number(durationDays) : 0;
       const suspendedUntil = safeStatus === 'suspended' && days > 0 ? (Date.now() + (days * 24 * 60 * 60 * 1000)) : null;
+      const finalReason = safeStatus === 'suspended'
+        ? (suspensionReason?.trim() || 'We suspected unusual activity on your account.')
+        : null;
 
       if (env.DB) {
-        await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?')
-          .bind(safeStatus, suspendedUntil, id)
+        try { await env.DB.prepare('ALTER TABLE users ADD COLUMN suspension_reason TEXT').run(); } catch (e) {}
+        await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ?, suspension_reason = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?')
+          .bind(safeStatus, suspendedUntil, finalReason, id)
           .run();
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -565,20 +575,21 @@ export async function onRequestPatch(context) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            sql: 'UPDATE users SET status = ?, suspended_until = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?',
-            params: [safeStatus, suspendedUntil, id],
+            sql: 'UPDATE users SET status = ?, suspended_until = ?, suspension_reason = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?',
+            params: [safeStatus, suspendedUntil, finalReason, id],
           }),
         });
       }
 
       const durationText = days > 0 ? ` for ${days} day${days > 1 ? 's' : ''}` : ' indefinitely';
+      const reasonDetail = safeStatus === 'suspended' ? `. Reason: "${finalReason}"` : '';
       await recordAudit(
         env,
         session,
         request,
         safeStatus === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
         safeStatus === 'suspended'
-          ? `Suspended user account #${id}${durationText}`
+          ? `Suspended user account #${id}${durationText}${reasonDetail}`
           : `Reactivated user account #${id}`
       );
 
@@ -587,6 +598,7 @@ export async function onRequestPatch(context) {
           success: true,
           status: safeStatus,
           suspended_until: suspendedUntil,
+          suspension_reason: finalReason,
           message: safeStatus === 'suspended'
             ? `User account has been temporarily suspended${durationText}. All sessions terminated.`
             : 'User account has been successfully reactivated.',

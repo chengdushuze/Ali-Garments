@@ -213,7 +213,8 @@ export default function App() {
     if (data.isSuspended) {
       title = 'Account Suspended • کھاتہ معطل کر دیا گیا ہے';
       const daysText = data.suspendedDays ? ` for ${data.suspendedDays} day(s)` : '';
-      message = data.error || `Your account has been temporarily suspended by an administrator${daysText}. Access is restricted.`;
+      const reasonText = data.reason || 'We suspected unusual activity on your account.';
+      message = `Your account has been temporarily suspended by an administrator${daysText}.\nReason: ${reasonText}`;
       type = 'suspended';
     } else if (data.isDeleted) {
       title = 'Account Removed • اکاؤنٹ ختم کر دیا گیا ہے';
@@ -1350,7 +1351,7 @@ export default function App() {
               <h4 className="font-bold text-white text-base">
                 {accountNoticeModal.title}
               </h4>
-              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed whitespace-pre-line">
                 {accountNoticeModal.message}
               </p>
             </div>

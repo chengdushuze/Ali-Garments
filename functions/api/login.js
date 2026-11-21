@@ -106,8 +106,13 @@ export async function onRequestPost(context) {
     // 2. Query user from Cloudflare D1
     let user = null;
     if (env.DB) {
+      // Proactively purge and drop legacy password_plain column if present
+      await env.DB.prepare('UPDATE users SET password_plain = NULL WHERE password_plain IS NOT NULL').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users DROP COLUMN password_plain').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN suspension_reason TEXT').run().catch(() => {});
+
       user = await env.DB.prepare(
-        `SELECT id, name, email, password_hash, role, status, suspended_until, 
+        `SELECT id, name, email, password_hash, role, status, suspended_until, suspension_reason, 
                 COALESCE(token_version, 1) as token_version, 
                 COALESCE(allow_vpn, 0) as allow_vpn,
                 COALESCE(allow_foreign_access, 0) as allow_foreign_access 
@@ -124,7 +129,7 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: `SELECT id, name, email, password_hash, role, status, suspended_until, 
+          sql: `SELECT id, name, email, password_hash, role, status, suspended_until, suspension_reason, 
                        COALESCE(token_version, 1) as token_version, 
                        COALESCE(allow_vpn, 0) as allow_vpn,
                        COALESCE(allow_foreign_access, 0) as allow_foreign_access 
@@ -212,10 +217,13 @@ export async function onRequestPost(context) {
       } else {
         const remainingDays = user.suspended_until ? Math.ceil((user.suspended_until - Date.now()) / (24 * 60 * 60 * 1000)) : null;
         const untilMsg = remainingDays ? ` for ${remainingDays} more day(s)` : '';
+        const defaultReason = 'We suspected unusual activity on your account.';
+        const reason = user.suspension_reason?.trim() || defaultReason;
         return new Response(
           JSON.stringify({
-            error: `Your account has been temporarily suspended by an administrator${untilMsg}. Please contact management.`,
+            error: `Your account has been temporarily suspended by an administrator${untilMsg}.\nReason: ${reason}`,
             isSuspended: true,
+            reason: reason,
             suspendedDays: remainingDays,
             suspendedUntil: user.suspended_until,
           }),
