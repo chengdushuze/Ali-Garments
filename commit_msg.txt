@@ -1,1 +1,1 @@
-security: purge hardcoded credentials, tokens and database IDs from codebase and add cloud backup suite
+feat(auth): restore 15-minute / 3-attempt rate limiter without periods

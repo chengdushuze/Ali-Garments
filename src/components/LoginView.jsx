@@ -10,6 +10,20 @@ export default function LoginView({ onLoginSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const handleResetLock = async () => {
+    setErrorMessage('');
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail) {
+      try {
+        await apiFetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, resetLock: true }),
+        });
+      } catch (e) {}
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -52,6 +66,14 @@ export default function LoginView({ onLoginSuccess }) {
           }
           return;
         } else {
+          // If 429 Rate limited (3 attempts / 15 minutes)
+          if (response.status === 429 || data.isRateLimited) {
+            const rawMsg = data.error || 'Too many failed login attempts (3 maximum) For your security login is locked for 15 minutes';
+            setErrorMessage(rawMsg.replace(/\./g, ''));
+            setIsLoading(false);
+            return;
+          }
+
           // If 403 Suspended or Geo/VPN
           if (data.isSuspended || response.status === 403) {
             const rawMsg = data.error || 'Your account has been temporarily suspended by an administrator';
@@ -136,6 +158,15 @@ export default function LoginView({ onLoginSuccess }) {
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 font-medium leading-tight whitespace-pre-line">
                 {(errorMessage || '').replace(/\./g, '')}
+                {errorMessage.includes('locked') && (
+                  <button
+                    type="button"
+                    onClick={handleResetLock}
+                    className="block mt-1.5 text-[11px] text-emerald-400 underline hover:text-emerald-300 font-semibold cursor-pointer"
+                  >
+                    Reset attempt lock (Unlock now)
+                  </button>
+                )}
                 {errorMessage.includes('VPN') && (
                   <button
                     type="button"
