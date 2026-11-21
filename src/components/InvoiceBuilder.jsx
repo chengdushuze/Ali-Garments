@@ -52,16 +52,23 @@ export default function InvoiceBuilder({
     due.setDate(due.getDate() + 15);
     setDueDate(due.toISOString().slice(0, 10));
 
-    // If transactions were selected, populate them as items!
-    if (customer && selectedTxIds && selectedTxIds.length > 0) {
+    // Initialize editable terms & conditions from settings
+    setNotes(settings.terms || '1. Sold goods are not returnable without bill.\n2. Payment terms 15 days net.\n3. In case of dispute, Faisalabad jurisdiction applies.');
+
+    // If transactions are selected or customer has ledger history, populate EXACT give or get records!
+    if (customer) {
       const allTxs = transactionsMap[customer.id] || [];
-      const selected = allTxs.filter(t => selectedTxIds.includes(t.id));
+      const selected = (selectedTxIds && selectedTxIds.length > 0)
+        ? allTxs.filter(t => selectedTxIds.includes(t.id))
+        : allTxs;
+
       if (selected.length > 0) {
         setItems(
           selected.map(tx => ({
             id: tx.id,
             date: tx.date || (tx.dateTime ? tx.dateTime.slice(0, 10) : now.toISOString().slice(0, 10)),
-            description: tx.description || (tx.type === 'give' ? 'Garments Supplied' : 'Payment Received'),
+            type: tx.type || 'give',
+            description: tx.description || (tx.type === 'give' ? 'Maal Diya (You Gave)' : 'Paisa Mila (You Received)'),
             quantity: 1,
             rate: Math.abs(Number(tx.amount || 0)),
             amount: Math.abs(Number(tx.amount || 0))
@@ -71,10 +78,8 @@ export default function InvoiceBuilder({
       }
     }
 
-    // Default item
-    setItems([
-      { id: '1', date: now.toISOString().slice(0, 10), description: 'Premium Cotton / Fabric Rolls', quantity: 10, rate: 1200, amount: 12000 }
-    ]);
+    // Do NOT add any dummy item by default!
+    setItems([]);
   }, [isOpen, customer, selectedTxIds]);
 
   if (!isOpen) return null;
@@ -98,16 +103,31 @@ export default function InvoiceBuilder({
   const handleAddItem = () => {
     setItems([
       ...items,
-      { id: Date.now().toString(), date: invoiceDate || new Date().toISOString().slice(0, 10), description: '', quantity: 1, rate: 0, amount: 0 }
+      {
+        id: Date.now().toString(),
+        date: invoiceDate || new Date().toISOString().slice(0, 10),
+        type: 'give',
+        description: 'Garments Goods / Service',
+        quantity: 1,
+        rate: 0,
+        amount: 0,
+      },
     ]);
   };
 
   const handleRemoveItem = (index) => {
-    if (items.length <= 1) return;
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // Calculations
+  // Calculations for Total Gave, Total Got, and Grand Total
+  const totalGave = items
+    .filter(item => item.type === 'give')
+    .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  const totalGot = items
+    .filter(item => item.type === 'get')
+    .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  const netLedgerBalance = totalGave - totalGot;
+
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
   const discountAmount = parseFloat(discount) || 0;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
@@ -290,68 +310,91 @@ export default function InvoiceBuilder({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300">
-                  <th className="py-2.5 px-3 font-semibold">#</th>
+                  <th className="py-2.5 px-3 font-semibold whitespace-nowrap">#</th>
                   <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Tx Date</th>
+                  <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Type</th>
                   <th className="py-2.5 px-3 font-semibold">Description / Garments Particulars</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">Qty</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">Rate ({currency})</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">Amount ({currency})</th>
-                  <th className="no-print py-2.5 px-2 text-center">Action</th>
+                  <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Qty</th>
+                  <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Rate ({currency})</th>
+                  <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Amount ({currency})</th>
+                  <th className="no-print py-2.5 px-2 text-center whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {items.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                    <td className="py-2.5 px-3 font-mono text-slate-400">{idx + 1}</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                      <input
-                        type="date"
-                        value={item.date || invoiceDate}
-                        onChange={e => handleItemChange(idx, 'date', e.target.value)}
-                        className="bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono text-xs w-28 text-slate-800 dark:text-slate-200"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <input
-                        type="text"
-                        value={item.description}
-                        placeholder="Garment item / fabric description..."
-                        onChange={e => handleItemChange(idx, 'description', e.target.value)}
-                        className="w-full bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-medium"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={e => handleItemChange(idx, 'quantity', e.target.value)}
-                        className="w-16 text-right bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={item.rate}
-                        onChange={e => handleItemChange(idx, 'rate', e.target.value)}
-                        className="w-24 text-right bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold">
-                      {currency} {(parseFloat(item.amount) || 0).toLocaleString()}
-                    </td>
-                    <td className="no-print py-2.5 px-2 text-center">
-                      <button
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-slate-300 hover:text-rose-500"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="py-8 text-center text-xs text-slate-400 font-medium">
+                      No transactions selected. Click "+ Add Line Item" below to add custom entries.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  items.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                      <td className="py-2.5 px-3 font-mono text-slate-400 whitespace-nowrap">{idx + 1}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <input
+                          type="date"
+                          value={item.date || invoiceDate}
+                          onChange={e => handleItemChange(idx, 'date', e.target.value)}
+                          className="bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono text-xs w-28 text-slate-800 dark:text-slate-200"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <select
+                          value={item.type || 'give'}
+                          onChange={e => handleItemChange(idx, 'type', e.target.value)}
+                          className={`text-[10px] font-bold uppercase rounded px-1.5 py-0.5 border cursor-pointer ${
+                            item.type === 'get'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                          }`}
+                        >
+                          <option value="give">Diya (Gave)</option>
+                          <option value="get">Mila (Got)</option>
+                        </select>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <input
+                          type="text"
+                          value={item.description}
+                          placeholder="Garment item / fabric description..."
+                          onChange={e => handleItemChange(idx, 'description', e.target.value)}
+                          className="w-full bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-medium"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => handleItemChange(idx, 'quantity', e.target.value)}
+                          className="w-16 text-right bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.rate}
+                          onChange={e => handleItemChange(idx, 'rate', e.target.value)}
+                          className="w-24 text-right bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono"
+                        />
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                        {currency} {(parseFloat(item.amount) || 0).toLocaleString()}
+                      </td>
+                      <td className="no-print py-2.5 px-2 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleRemoveItem(idx)}
+                          className="text-slate-300 hover:text-rose-500 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -360,10 +403,10 @@ export default function InvoiceBuilder({
           <div className="no-print">
             <button
               onClick={handleAddItem}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add Line Item</span>
+              <span className="whitespace-nowrap">Add Line Item</span>
             </button>
           </div>
 
@@ -412,60 +455,83 @@ export default function InvoiceBuilder({
               </div>
             </div>
 
-            {/* Right: Calculations */}
-            <div className="w-full sm:w-72 space-y-2 font-mono text-xs">
+            {/* Right: Calculations with Total Gave or Give Summary */}
+            <div className="w-full sm:w-80 space-y-2 font-mono text-xs bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div className="flex justify-between py-1 text-rose-600 dark:text-rose-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+                <span className="whitespace-nowrap">Total Maal Diya (You Gave):</span>
+                <span className="font-bold">{currency} {totalGave.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between py-1 text-emerald-600 dark:text-emerald-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+                <span className="whitespace-nowrap">Total Paisa Mila (You Got):</span>
+                <span className="font-bold">{currency} {totalGot.toLocaleString()}</span>
+              </div>
+
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Subtotal:</span>
+                <span className="text-slate-500 whitespace-nowrap">Subtotal:</span>
                 <span className="font-bold">{currency} {subtotal.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between py-1">
-                <span className="text-slate-500">Discount ({currency}):</span>
+                <span className="text-slate-500 whitespace-nowrap">Discount ({currency}):</span>
                 <input
                   type="number"
                   min="0"
                   value={discount}
                   onChange={e => setDiscount(e.target.value)}
-                  className="no-print w-20 text-right bg-slate-50 dark:bg-slate-800 border rounded px-1 py-0.5"
+                  className="no-print w-20 text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5"
                 />
                 <span className="print:inline hidden font-bold">-{currency} {discountAmount.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between py-1">
-                <span className="text-slate-500">Tax (%):</span>
+                <span className="text-slate-500 whitespace-nowrap">Tax (%):</span>
                 <input
                   type="number"
                   min="0"
                   value={taxPercent}
                   onChange={e => setTaxPercent(e.target.value)}
-                  className="no-print w-16 text-right bg-slate-50 dark:bg-slate-800 border rounded px-1 py-0.5"
+                  className="no-print w-16 text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5"
                 />
                 <span className="print:inline hidden font-bold">+{currency} {taxAmount.toLocaleString()}</span>
               </div>
 
               <div className="flex justify-between py-2 border-t-2 border-slate-900 dark:border-white text-sm font-bold">
-                <span>Grand Total:</span>
-                <span className="text-emerald-600 dark:text-emerald-400">
+                <span className="whitespace-nowrap">Grand Total:</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">
                   {currency} {grandTotal.toLocaleString()}
                 </span>
+              </div>
+
+              <div className="text-[11px] text-slate-500 pt-1 text-right font-semibold">
+                Net Balance: {netLedgerBalance >= 0 ? `+${currency} ${netLedgerBalance.toLocaleString()} (Receive)` : `-${currency} ${Math.abs(netLedgerBalance).toLocaleString()} (Payable)`}
               </div>
             </div>
           </div>
 
-          {/* Terms & Stamp Footer */}
-          <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex justify-between items-end text-xs text-slate-500">
-            <div className="max-w-md whitespace-pre-line">
-              <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">
-                Terms & Conditions
+          {/* Terms & Conditions (Editable on Receipt) & Stamp Footer */}
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 text-xs text-slate-500">
+            <div className="w-full sm:max-w-md">
+              <span className="font-bold uppercase tracking-wider text-[10px] text-slate-400 block mb-1">
+                Terms & Conditions / شرائط (Editable on Receipt)
               </span>
-              {settings.terms}
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Enter custom terms & conditions for this receipt..."
+                className="no-print w-full text-xs p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed font-sans"
+              />
+              <div className="print:block hidden whitespace-pre-line text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                {notes}
+              </div>
             </div>
 
-            <div className="text-center w-40 pt-10 border-t border-dashed border-slate-400">
-              <span className="block font-semibold text-slate-700 dark:text-slate-300">
+            <div className="text-center w-40 pt-8 border-t border-dashed border-slate-400 shrink-0 self-end">
+              <span className="block font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                 ALI Garments
               </span>
-              <span className="text-[10px] text-slate-400">Authorized Signature</span>
+              <span className="text-[10px] text-slate-400 whitespace-nowrap">Authorized Signature</span>
             </div>
           </div>
         </div>

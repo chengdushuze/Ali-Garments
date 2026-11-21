@@ -279,9 +279,22 @@ export async function restoreFullBackupData(backupData) {
 }
 
 
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000; // 5 days security login lifespan
+
 export async function getCachedAuthUser() {
   try {
-    return await localforage.getItem('cached_auth_user');
+    const user = await localforage.getItem('cached_auth_user');
+    if (!user) return null;
+
+    // Strict 5-day session expiry enforcement
+    const loginTime = user.cachedAt || user.loginTime || 0;
+    if (loginTime > 0 && Date.now() - loginTime > FIVE_DAYS_MS) {
+      console.warn('Session expired after 5 days. Forcing re-login for security.');
+      await clearCachedAuthUser();
+      return null;
+    }
+
+    return user;
   } catch (e) {
     return null;
   }
@@ -289,7 +302,12 @@ export async function getCachedAuthUser() {
 
 export async function setCachedAuthUser(user) {
   try {
-    await localforage.setItem('cached_auth_user', user);
+    const userWithTimestamp = {
+      ...user,
+      cachedAt: Date.now(),
+      loginTime: Date.now(),
+    };
+    await localforage.setItem('cached_auth_user', userWithTimestamp);
     return true;
   } catch (e) {
     return false;

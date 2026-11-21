@@ -147,18 +147,18 @@ export default function DashboardStats({
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenNewCustomer}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95 whitespace-nowrap"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Add Party / Customer</span>
+            <span className="whitespace-nowrap">Add Party / Customer</span>
           </button>
 
           <button
             onClick={onDownloadAllExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95 whitespace-nowrap"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>Download All Data (.xlsx)</span>
+            <span className="whitespace-nowrap">Download All Data (.xlsx)</span>
           </button>
         </div>
       </div>

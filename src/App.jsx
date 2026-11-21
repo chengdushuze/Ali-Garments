@@ -14,6 +14,7 @@ import InvoiceBuilder from './components/InvoiceBuilder';
 import SettingsModal from './components/SettingsModal';
 import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
+import PhoneBottomNav from './components/PhoneBottomNav';
 import {
   getSettings,
   saveSettings,
@@ -139,6 +140,7 @@ export default function App() {
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [invoiceCustomer, setInvoiceCustomer] = useState(null);
   const [invoiceTxIds, setInvoiceTxIds] = useState([]);
+  const [mobileTab, setMobileTab] = useState('parties'); // 'parties' or 'stats' for Phone Menu
 
   // Recycle Bin & Consent state
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
@@ -719,19 +721,21 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5">
-        {/* Dashboard Analytics & Totals */}
-        <DashboardStats
-          customers={customers}
-          transactionsMap={transactionsMap}
-          currency={settings.currency || 'Rs.'}
-          onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
-          onDownloadAllExcel={handleDownloadAllExcel}
-        />
+      {/* Main Content Area (Responsive on all screen sizes, overflow-x-hidden, padding-bottom for Phone Menu) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 pb-24 md:pb-8 overflow-x-hidden">
+        {/* On Desktop: Always show stats. On Mobile/Phone: Show stats when Analytics tab active */}
+        <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block' : 'hidden md:block'}`}>
+          <DashboardStats
+            customers={customers}
+            transactionsMap={transactionsMap}
+            currency={settings.currency || 'Rs.'}
+            onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
+            onDownloadAllExcel={handleDownloadAllExcel}
+          />
+        </div>
 
-        {/* Master-Detail Ledger Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
+        {/* Master-Detail Ledger Grid (Phone: CustomerList or CustomerDetail depending on selection; Desktop: side-by-side) */}
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start ${mobileTab === 'stats' ? 'hidden md:grid' : 'grid'}`}>
           {/* Left Column: Customer Directory (4 cols on lg, full on mobile if no detail view) */}
           <div className={`lg:col-span-5 h-[580px] sm:h-[620px] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
             <CustomerList
@@ -854,11 +858,31 @@ export default function App() {
         isPermanent={deleteConsent.isPermanent}
       />
 
-      {/* 7. Admin User Management Modal (Closed Multi-User Creation) */}
+      {/* 7. Admin User Management & Audit Modal */}
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         currentUser={currentUser}
+      />
+
+      {/* 8. Phone & Android Bottom Navigation Menu */}
+      <PhoneBottomNav
+        activeTab={mobileTab}
+        onSelectTab={(tab) => setMobileTab(tab)}
+        onOpenInvoice={() => {
+          setInvoiceCustomer(selectedCustomer || customers[0]);
+          setInvoiceTxIds([]);
+          setIsInvoiceOpen(true);
+        }}
+        onOpenExcel={handleDownloadAllExcel}
+        onOpenAdmin={() => setIsAdminPanelOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        isAdmin={currentUser?.role === 'admin'}
+        selectedCustomer={selectedCustomer}
+        onBackToParties={() => {
+          setSelectedCustomer(null);
+          setMobileTab('parties');
+        }}
       />
     </div>
   );

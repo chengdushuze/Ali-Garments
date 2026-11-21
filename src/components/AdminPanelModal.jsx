@@ -18,10 +18,15 @@ import {
   EyeOff,
   UserX,
   UserCheck,
-  ShieldAlert
+  ShieldAlert,
+  ClipboardList,
+  Search,
+  Activity,
+  History
 } from 'lucide-react';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
+  const [adminTab, setAdminTab] = useState('users'); // 'users', 'audit', 'backup'
   const [usersList, setUsersList] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [name, setName] = useState('');
@@ -49,6 +54,11 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isTogglingSuspend, setIsTogglingSuspend] = useState(false);
   const [suspendError, setSuspendError] = useState('');
 
+  // Audit Log State
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditSearch, setAuditSearch] = useState('');
+
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupStatus, setBackupStatus] = useState(null);
@@ -66,6 +76,22 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       console.error('Failed to load users:', err);
     } finally {
       setIsLoadingUsers(false);
+    }
+  };
+
+  // Fetch audit logs
+  const fetchAuditLogs = async () => {
+    setIsLoadingAudit(true);
+    try {
+      const res = await fetch('/api/admin/audit');
+      const data = await res.json();
+      if (res.ok && data.logs) {
+        setAuditLogs(data.logs);
+      }
+    } catch (err) {
+      console.error('Failed to load audit logs:', err);
+    } finally {
+      setIsLoadingAudit(false);
     }
   };
 
@@ -333,19 +359,31 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
+  // Filter audit logs
+  const filteredAuditLogs = auditLogs.filter(log => {
+    if (!auditSearch.trim()) return true;
+    const q = auditSearch.toLowerCase();
+    return (
+      (log.action && log.action.toLowerCase().includes(q)) ||
+      (log.user_email && log.user_email.toLowerCase().includes(q)) ||
+      (log.details && log.details.toLowerCase().includes(q)) ||
+      (log.ip_address && log.ip_address.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-white">Admin Management Portal</h3>
-              <p className="text-xs text-slate-400">
-                User Creation & Removal • Daily Nightly D1 Backup
+              <h3 className="font-bold text-base sm:text-lg text-white">Admin Management Portal</h3>
+              <p className="text-[11px] sm:text-xs text-slate-400">
+                User Access & Security • Activity Audit • Cloud Backup
               </p>
             </div>
           </div>
@@ -357,8 +395,53 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           </button>
         </div>
 
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-1 px-4 sm:px-5 pt-2 border-b border-slate-800 bg-slate-950/40 text-xs overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setAdminTab('users')}
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 font-semibold rounded-t-xl transition-all whitespace-nowrap border-b-2 cursor-pointer ${
+              adminTab === 'users'
+                ? 'border-emerald-500 text-white bg-slate-900'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span className="whitespace-nowrap">User Accounts</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAdminTab('audit');
+              fetchAuditLogs();
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 font-semibold rounded-t-xl transition-all whitespace-nowrap border-b-2 cursor-pointer ${
+              adminTab === 'audit'
+                ? 'border-emerald-500 text-white bg-slate-900'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ClipboardList className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="whitespace-nowrap">Audit Trail</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAdminTab('backup')}
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 font-semibold rounded-t-xl transition-all whitespace-nowrap border-b-2 cursor-pointer ${
+              adminTab === 'backup'
+                ? 'border-emerald-500 text-white bg-slate-900'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span className="whitespace-nowrap">D1 Backup</span>
+          </button>
+        </div>
+
         {/* Content Body */}
-        <div className="p-5 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
           {/* Status Alert */}
           {statusMessage.text && (
             <div
@@ -377,310 +460,414 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
             </div>
           )}
 
-          {/* Section A: Daily Nightly Cloudflare D1 Backup Card */}
-          <div className="bg-slate-950/70 border border-emerald-500/30 rounded-2xl p-5 shadow-inner">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800">
-                  <Database className="w-4 h-4" />
+          {/* TAB 1: USER ACCOUNTS & MANAGEMENT */}
+          {adminTab === 'users' && (
+            <div className="space-y-6">
+              {/* Section B: Create User Form */}
+              <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
+                <div className="flex items-center gap-2 mb-4 text-emerald-400 font-semibold text-sm">
+                  <UserPlus className="w-4 h-4" />
+                  <span className="whitespace-nowrap">Create New User Account</span>
                 </div>
-                <div>
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <span>Daily Nightly D1 Backup</span>
-                    <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-700 rounded-full">
-                      Automated Cron
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Target: Cloud Backup (ali-garments-backup)
-                  </p>
-                </div>
-              </div>
 
-              <button
-                onClick={handleTriggerBackup}
-                disabled={isBackingUp}
-                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-              >
-                {isBackingUp ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Backing Up...</span>
-                  </>
-                ) : (
-                  <>
-                    <HardDriveDownload className="w-3.5 h-3.5" />
-                    <span>Run Backup Now</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 font-mono">
-              <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Schedule: Every day night at 20:00 UTC (1:00 AM Pakistan PKT)</span>
-            </div>
-
-            {backupStatus && (
-              <div
-                className={`mt-3 p-3 rounded-xl text-xs flex items-start gap-2 ${
-                  backupStatus.type === 'success'
-                    ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300'
-                    : 'bg-rose-950/80 border border-rose-800 text-rose-300'
-                }`}
-              >
-                {backupStatus.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                )}
-                <div>
-                  <p className="font-semibold">{backupStatus.text}</p>
-                  {backupStatus.stats && (
-                    <p className="text-[10px] text-emerald-400 font-mono mt-0.5">
-                      Backed up: {backupStatus.stats.backedUpCustomers} Customers •{' '}
-                      {backupStatus.stats.backedUpChunks} Chunks •{' '}
-                      {backupStatus.stats.backedUpUsers} Users
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section B: Create User Form */}
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4 text-emerald-400 font-semibold text-sm">
-              <UserPlus className="w-4 h-4" />
-              <span>Create New User Account</span>
-            </div>
-
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Tariq Mehmood"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tariq@aligarments.com"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    User Role
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-                  >
-                    <option value="user">User (Standard Access)</option>
-                    <option value="admin">Admin (Full Privilege)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 text-white font-medium rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Creating Encrypted Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-4 h-4" />
-                    <span>Create User</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Section C: Existing User Accounts (with Remove/Delete Action) */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
-                <Users className="w-4 h-4 text-emerald-400" />
-                <span>Existing User Accounts ({usersList.length})</span>
-              </div>
-              <button
-                onClick={fetchUsers}
-                disabled={isLoadingUsers}
-                className="text-xs text-emerald-400 hover:underline cursor-pointer"
-              >
-                {isLoadingUsers ? 'Refreshing...' : 'Refresh List'}
-              </button>
-            </div>
-
-            <div className="bg-slate-950/40 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="divide-y divide-slate-800">
-                {usersList.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-500">
-                    {isLoadingUsers ? 'Loading accounts...' : 'No users found.'}
+                <form onSubmit={handleCreateUser} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Tariq Mehmood"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="tariq@aligarments.com"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
                   </div>
-                ) : (
-                  usersList.map((u) => {
-                    const isSelf = u.id === currentUser?.id;
-                    const isDeleting = deletingUserId === u.id;
 
-                    return (
-                      <div
-                        key={u.id}
-                        className="p-3 sm:p-4 flex items-center justify-between hover:bg-slate-900/60 transition-colors"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        User Role
+                      </label>
+                      <select
+                        value={role}
+                        onChange={(e) => setRole(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                       >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm text-white truncate">
-                              {u.name}
-                            </span>
-                            {isSelf && (
-                              <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md">
-                                You
-                              </span>
-                            )}
-                            <span
-                              className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
-                                u.role === 'admin'
-                                  ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
-                                  : 'bg-slate-800 text-slate-300 border-slate-700'
-                              }`}
-                            >
-                              {u.role}
-                            </span>
-                            <span
-                              className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
-                                u.status === 'suspended'
-                                  ? 'bg-rose-950/90 text-rose-300 border-rose-850/80'
-                                  : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
-                              }`}
-                            >
-                              {u.status === 'suspended' ? 'Suspended' : 'Active'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
-                        </div>
+                        <option value="user">User (Standard Access)</option>
+                        <option value="admin">Admin (Full Privilege)</option>
+                      </select>
+                    </div>
+                  </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[11px] text-slate-500 font-mono hidden sm:inline mr-1">
-                            #{u.id}
-                          </span>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50 text-white font-medium rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span className="whitespace-nowrap">Creating Encrypted Account...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span className="whitespace-nowrap">Create User</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
 
-                          {/* Temporary Suspend / Reactivate User Button */}
-                          {!isSelf && (
-                            <button
-                              onClick={() => {
-                                setSuspendingUser(u);
-                                setSuspendAdminPassword('');
-                                setSuspendError('');
-                                setShowSuspendAdminPassword(false);
-                              }}
-                              title={
-                                u.status === 'suspended'
-                                  ? `Reactivate account for ${u.name}`
-                                  : `Temporarily suspend account for ${u.name}`
-                              }
-                              className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                                u.status === 'suspended'
-                                  ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
-                                  : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
-                              }`}
-                            >
-                              {u.status === 'suspended' ? (
-                                <UserCheck className="w-4 h-4" />
-                              ) : (
-                                <UserX className="w-4 h-4" />
-                              )}
-                            </button>
-                          )}
+              {/* Section C: Existing User Accounts */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-slate-300 font-semibold text-sm">
+                    <Users className="w-4 h-4 text-emerald-400" />
+                    <span className="whitespace-nowrap">Existing User Accounts ({usersList.length})</span>
+                  </div>
+                  <button
+                    onClick={fetchUsers}
+                    disabled={isLoadingUsers}
+                    className="text-xs text-emerald-400 hover:underline cursor-pointer whitespace-nowrap flex items-center gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                    <span>{isLoadingUsers ? 'Refreshing...' : 'Refresh List'}</span>
+                  </button>
+                </div>
 
-                          {/* Change Password Button */}
-                          <button
-                            onClick={() => {
-                              setPasswordResetUser(u);
-                              setAdminVerificationPassword('');
-                              setNewPassword('');
-                              setConfirmNewPassword('');
-                              setPasswordError('');
-                              setShowAdminPassword(false);
-                              setShowNewPassword(false);
-                            }}
-                            title={
-                              isSelf
-                                ? 'Change Your Admin Password'
-                                : `Change Password for ${u.name}`
-                            }
-                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                              isSelf
-                                ? 'text-amber-400 bg-amber-950/30 hover:bg-amber-950/60'
-                                : 'text-slate-400 hover:text-amber-400 hover:bg-amber-950/40'
-                            }`}
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-
-                          {/* Remove User Button */}
-                          <button
-                            onClick={() => handleDeleteUser(u)}
-                            disabled={isSelf || isDeleting}
-                            title={
-                              isSelf
-                                ? 'You cannot remove your own active account'
-                                : `Remove ${u.name}`
-                            }
-                            className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition-colors cursor-pointer"
-                          >
-                            {isDeleting ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
+                <div className="bg-slate-950/40 border border-slate-800 rounded-2xl overflow-hidden">
+                  <div className="divide-y divide-slate-800">
+                    {usersList.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500">
+                        {isLoadingUsers ? 'Loading accounts...' : 'No users found.'}
                       </div>
-                    );
-                  })
-                )}
+                    ) : (
+                      usersList.map((u) => {
+                        const isSelf = u.id === currentUser?.id;
+                        const isDeleting = deletingUserId === u.id;
+
+                        return (
+                          <div
+                            key={u.id}
+                            className="p-3 sm:p-4 flex items-center justify-between hover:bg-slate-900/60 transition-colors"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-sm text-white truncate">
+                                  {u.name}
+                                </span>
+                                {isSelf && (
+                                  <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-md">
+                                    You
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
+                                    u.role === 'admin'
+                                      ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                                  }`}
+                                >
+                                  {u.role}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
+                                    u.status === 'suspended'
+                                      ? 'bg-rose-950/90 text-rose-300 border-rose-850/80'
+                                      : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                                  }`}
+                                >
+                                  {u.status === 'suspended' ? 'Suspended' : 'Active'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] text-slate-500 font-mono hidden sm:inline mr-1">
+                                #{u.id}
+                              </span>
+
+                              {/* Temporary Suspend / Reactivate User Button */}
+                              {!isSelf && (
+                                <button
+                                  onClick={() => {
+                                    setSuspendingUser(u);
+                                    setSuspendAdminPassword('');
+                                    setSuspendError('');
+                                    setShowSuspendAdminPassword(false);
+                                  }}
+                                  title={
+                                    u.status === 'suspended'
+                                      ? `Reactivate account for ${u.name}`
+                                      : `Temporarily suspend account for ${u.name}`
+                                  }
+                                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                                    u.status === 'suspended'
+                                      ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
+                                      : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
+                                  }`}
+                                >
+                                  {u.status === 'suspended' ? (
+                                    <UserCheck className="w-4 h-4" />
+                                  ) : (
+                                    <UserX className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Change Password Button */}
+                              <button
+                                onClick={() => {
+                                  setPasswordResetUser(u);
+                                  setAdminVerificationPassword('');
+                                  setNewPassword('');
+                                  setConfirmNewPassword('');
+                                  setPasswordError('');
+                                  setShowAdminPassword(false);
+                                  setShowNewPassword(false);
+                                }}
+                                title={
+                                  isSelf
+                                    ? 'Change Your Admin Password'
+                                    : `Change Password for ${u.name}`
+                                }
+                                className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                                  isSelf
+                                    ? 'text-amber-400 bg-amber-950/30 hover:bg-amber-950/60'
+                                    : 'text-slate-400 hover:text-amber-400 hover:bg-amber-950/40'
+                                }`}
+                              >
+                                <Key className="w-4 h-4" />
+                              </button>
+
+                              {/* Remove User Button */}
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                disabled={isSelf || isDeleting}
+                                title={
+                                  isSelf
+                                    ? 'You cannot remove your own active account'
+                                    : `Remove ${u.name}`
+                                }
+                                className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB 2: AUDIT TRAIL */}
+          {adminTab === 'audit' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800">
+                    <ClipboardList className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-white">Security & Activity Audit Trail</h4>
+                    <p className="text-[11px] text-slate-400">Tracks logins, password changes, account suspensions, and backups</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchAuditLogs}
+                  disabled={isLoadingAudit}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto whitespace-nowrap"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAudit ? 'animate-spin' : ''}`} />
+                  <span className="whitespace-nowrap">Refresh Logs</span>
+                </button>
+              </div>
+
+              {/* Search Filter */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter by user email, action (LOGIN, SUSPEND, etc.), or details..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Audit Table */}
+              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="overflow-x-auto max-h-[380px]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 sticky top-0 z-10">
+                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Timestamp</th>
+                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Action</th>
+                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">User</th>
+                        <th className="py-2.5 px-3 font-semibold">Event Details</th>
+                        <th className="py-2.5 px-3 font-semibold whitespace-nowrap">IP Address</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {filteredAuditLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-8 text-center text-slate-500 text-xs">
+                            {isLoadingAudit ? 'Loading audit trail records...' : 'No activity logs found.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAuditLogs.map((log) => {
+                          const actionClass =
+                            log.action.includes('SUSPEND') ? 'bg-rose-950 text-rose-300 border-rose-800' :
+                            log.action.includes('REACTIVATE') ? 'bg-emerald-950 text-emerald-300 border-emerald-800' :
+                            log.action.includes('PASSWORD') ? 'bg-amber-950 text-amber-300 border-amber-800' :
+                            log.action.includes('LOGIN') ? 'bg-blue-950 text-blue-300 border-blue-800' :
+                            log.action.includes('BACKUP') ? 'bg-teal-950 text-teal-300 border-teal-800' :
+                            'bg-slate-800 text-slate-300 border-slate-700';
+
+                          return (
+                            <tr key={log.id} className="hover:bg-slate-900/50">
+                              <td className="py-2 px-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                                {log.created_at ? new Date(log.created_at).toLocaleString() : 'Recent'}
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${actionClass}`}>
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-slate-300 whitespace-nowrap">
+                                {log.user_email || `User #${log.user_id}`}
+                              </td>
+                              <td className="py-2 px-3 text-slate-300 font-medium">
+                                {log.details}
+                              </td>
+                              <td className="py-2 px-3 font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                {log.ip_address || 'client'}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CLOUDFLARE D1 BACKUP */}
+          {adminTab === 'backup' && (
+            <div className="bg-slate-950/70 border border-emerald-500/30 rounded-2xl p-5 shadow-inner">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                      <span className="whitespace-nowrap">Daily Nightly D1 Backup</span>
+                      <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-700 rounded-full">
+                        Automated Cron
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      Target: Cloud Backup (ali-garments-backup)
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleTriggerBackup}
+                  disabled={isBackingUp}
+                  className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap"
+                >
+                  {isBackingUp ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span className="whitespace-nowrap">Backing Up...</span>
+                    </>
+                  ) : (
+                    <>
+                      <HardDriveDownload className="w-3.5 h-3.5" />
+                      <span className="whitespace-nowrap">Run Backup Now</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 font-mono">
+                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Schedule: Daily at 20:00 UTC (1:00 AM Pakistan PKT)</span>
+              </div>
+
+              {backupStatus && (
+                <div
+                  className={`mt-3 p-3 rounded-xl text-xs flex items-start gap-2 ${
+                    backupStatus.type === 'success'
+                      ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950/80 border border-rose-800 text-rose-300'
+                  }`}
+                >
+                  {backupStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="font-semibold">{backupStatus.text}</p>
+                    {backupStatus.stats && (
+                      <p className="text-[10px] text-emerald-400 font-mono mt-0.5">
+                        Backed up: {backupStatus.stats.backedUpCustomers} Customers •{' '}
+                        {backupStatus.stats.backedUpChunks} Chunks •{' '}
+                        {backupStatus.stats.backedUpUsers} Users
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Change Password Dialog Overlay with Admin Consent Verification */}

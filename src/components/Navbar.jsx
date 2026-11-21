@@ -55,10 +55,10 @@ export default function Navbar({
               <button
                 onClick={onOpenAdminPanel}
                 title="Admin User Management Portal & Passwords"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/40 shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
                 <Shield className="w-3.5 h-3.5 text-amber-500" />
-                <span>Admin</span>
+                <span className="whitespace-nowrap">Admin</span>
               </button>
             )}
 
@@ -66,20 +66,20 @@ export default function Navbar({
             <button
               onClick={onDownloadAllExcel}
               title="Download All Ledger Data (Excel .xlsx)"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95 whitespace-nowrap"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Export Excel</span>
+              <span className="hidden md:inline whitespace-nowrap">Export Excel</span>
             </button>
 
             {/* Invoices */}
             <button
               onClick={onOpenInvoiceBuilder}
               title="Create Smart Invoice"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all active:scale-95 whitespace-nowrap"
             >
               <FileText className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="hidden md:inline">Invoice</span>
+              <span className="hidden md:inline whitespace-nowrap">Invoice</span>
             </button>
 
             {/* Recycle Bin (Trash) */}

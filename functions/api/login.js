@@ -176,22 +176,35 @@ export async function onRequestPost(context) {
         .bind(cleanEmail, clientIp)
         .run()
         .catch(() => {});
+
+      // Record audit log for successful user login
+      try {
+        await env.DB.prepare(
+          'CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, user_email TEXT, action TEXT NOT NULL, details TEXT, ip_address TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'
+        ).run();
+        await env.DB.prepare(
+          'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+        ).bind(user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in successfully`, clientIp).run();
+      } catch (e) {}
     }
 
-    // 5. Sign session token with SESSION_SECRET
+    // 5. Sign session token with SESSION_SECRET (Strict 5-Day Expiration for Security)
     const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+    const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+    const FIVE_DAYS_SECONDS = 5 * 24 * 60 * 60; // 432,000 seconds
+
     const sessionPayload = {
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role || 'user',
-      exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      exp: Date.now() + FIVE_DAYS_MS,
     };
 
     const sessionToken = await signSessionToken(sessionPayload, secret);
 
-    // Set HttpOnly, Secure, SameSite=Strict cookie
-    const cookieHeader = `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`;
+    // Set HttpOnly, Secure, SameSite=Strict cookie with 5-day lifespan
+    const cookieHeader = `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${FIVE_DAYS_SECONDS}`;
 
     return new Response(
       JSON.stringify({

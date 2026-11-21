@@ -175,10 +175,26 @@ export async function onRequestPost(context) {
       });
     }
 
+    // Record audit log for backup operation
+    if (env.DB) {
+      try {
+        const clientIp = request.headers.get('CF-Connecting-IP') || 'client';
+        await env.DB.prepare(
+          'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+        ).bind(
+          session.userId || 1,
+          session.email || 'admin',
+          'BACKUP_EXECUTED',
+          `Nightly backup completed: ${customers.length} parties, ${chunks.length} chunks, ${users.length} users`,
+          clientIp
+        ).run();
+      } catch (e) {}
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Daily nightly backup to "${backupDbName}" (${backupDbId}) successfully created!`,
+        message: 'Daily nightly backup successfully created in secure secondary storage!',
         stats: {
           timestamp: new Date().toISOString(),
           targetDatabase: backupDbName,

@@ -177,48 +177,48 @@ export default function CustomerDetail({
           {/* Download Specific XLS */}
           <button
             onClick={() => downloadCustomerExcel(customer, transactions, settings)}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 transition-all active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 transition-all active:scale-95 whitespace-nowrap cursor-pointer"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>Download XLS</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="whitespace-nowrap">Download XLS</span>
           </button>
 
           {/* WhatsApp Reminder */}
           <button
             onClick={handleSendWhatsAppReminder}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/60 transition-all active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/60 transition-all active:scale-95 whitespace-nowrap cursor-pointer"
           >
-            <MessageCircle className="w-4 h-4 text-green-600" />
-            <span>WhatsApp Remind</span>
+            <MessageCircle className="w-3.5 h-3.5 text-green-600 shrink-0" />
+            <span className="whitespace-nowrap">WhatsApp</span>
           </button>
 
           {/* Create Invoice */}
           <button
             onClick={() => onOpenInvoiceForCustomer(customer, selectedTxIds)}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95 whitespace-nowrap cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-indigo-500" />
-            <span>{selectedTxIds.length > 0 ? `Invoice (${selectedTxIds.length})` : 'Invoice'}</span>
+            <FileText className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span className="whitespace-nowrap">{selectedTxIds.length > 0 ? `Invoice (${selectedTxIds.length})` : 'Invoice'}</span>
           </button>
 
           {/* Quick Share Statement */}
           <button
             onClick={() => window.print()}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95 whitespace-nowrap cursor-pointer"
           >
-            <Share2 className="w-4 h-4 text-slate-500" />
-            <span>Print Ledger</span>
+            <Share2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="whitespace-nowrap">Print Ledger</span>
           </button>
 
           {/* Delete Customer (Move to Recycle Bin) */}
           {onRequestDeleteCustomer && (
             <button
               onClick={() => onRequestDeleteCustomer(customer)}
-              className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 transition-all active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 transition-all active:scale-95 whitespace-nowrap cursor-pointer"
               title="Delete Party (Move to Recycle Bin for 30 Days)"
             >
-              <Trash2 className="w-4 h-4 text-rose-500" />
-              <span>Delete Party</span>
+              <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span className="whitespace-nowrap">Delete Party</span>
             </button>
           )}
         </div>
@@ -390,23 +390,23 @@ export default function CustomerDetail({
       </div>
 
       {/* Sticky Bottom Actions: You Gave (Debit) vs You Got (Credit) */}
-      <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 grid grid-cols-2 gap-3">
+      <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 grid grid-cols-2 gap-2 sm:gap-3">
         {/* You Gave (Debit / Maal Diya) */}
         <button
           onClick={() => onOpenAddTransaction(customer, 'give')}
-          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 active:scale-95 transition-all"
+          className="flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl font-bold text-xs sm:text-sm bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
         >
-          <ArrowUpRight className="w-5 h-5" />
-          <span>You Gave (ادھار دیا)</span>
+          <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="whitespace-nowrap">You Gave (ادھار دیا)</span>
         </button>
 
         {/* You Got (Credit / Paisa Mila) */}
         <button
           onClick={() => onOpenAddTransaction(customer, 'get')}
-          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+          className="flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-2 sm:px-4 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
         >
-          <ArrowDownLeft className="w-5 h-5" />
-          <span>You Got (وصولی ملی)</span>
+          <ArrowDownLeft className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <span className="whitespace-nowrap">You Got (وصولی ملی)</span>
         </button>
       </div>
     </div>

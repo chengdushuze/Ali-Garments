@@ -170,63 +170,63 @@ export default function LoginView({ onLoginSuccess }) {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-4 sm:p-6 md:p-8">
+    <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-3 sm:p-6 select-none">
       {/* Top Bar with System Badge */}
-      <div className="w-full flex justify-between items-center max-w-md mx-auto pt-2">
-        <div className="flex items-center gap-2.5">
+      <div className="w-full flex justify-between items-center max-w-sm sm:max-w-md mx-auto pt-1 sm:pt-2 shrink-0">
+        <div className="flex items-center gap-2">
           <img
             src="/logo.png"
             alt="Rana ALI Garments"
-            className="w-9 h-9 rounded-xl shadow-md shadow-emerald-500/20 object-contain bg-white p-0.5 border border-slate-700"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-md shadow-emerald-500/20 object-contain bg-white p-0.5 border border-slate-700"
           />
-          <span className="font-extrabold tracking-tight text-white text-base">
+          <span className="font-extrabold tracking-tight text-white text-sm sm:text-base whitespace-nowrap">
             ALI GARMENTS
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/40 px-2.5 py-1 rounded-full">
-          <Shield className="w-3 h-3 text-emerald-400" />
+        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/40 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full whitespace-nowrap">
+          <Shield className="w-3 h-3 text-emerald-400 shrink-0" />
           <span>Closed Portal</span>
         </div>
       </div>
 
-      {/* Login Card */}
-      <div className="w-full max-w-md mx-auto my-auto py-6">
-        <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60">
+      {/* Login Card (Fits 100% On Screen Without Scrolling) */}
+      <div className="w-full max-w-sm sm:max-w-md mx-auto my-auto py-2">
+        <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl shadow-black/60">
           {/* Header with Custom Rana ALI Garments Logo */}
-          <div className="text-center mb-6">
-            <div className="flex justify-center mb-4">
+          <div className="text-center mb-3 sm:mb-4">
+            <div className="flex justify-center mb-2">
               <img
                 src="/logo.png"
                 alt="Rana ALI Garments Logo"
-                className="w-24 h-24 rounded-2xl shadow-2xl shadow-emerald-500/30 border-2 border-emerald-500/40 object-contain bg-white p-1 hover:scale-105 transition-transform"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl shadow-xl shadow-emerald-500/30 border-2 border-emerald-500/40 object-contain bg-white p-1 hover:scale-105 transition-transform"
               />
             </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Sign In to Your Khata
             </h2>
-            <p className="text-slate-400 text-xs sm:text-sm mt-1.5">
+            <p className="text-slate-400 text-[11px] sm:text-xs mt-0.5">
               Authorized personnel only. Closed multi-user portal.
             </p>
           </div>
 
           {/* Error Banner */}
           {errorMessage && (
-            <div className="mb-5 p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn">
-              <AlertCircle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
-              <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
+            <div className="mb-3 p-2.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+              <div className="flex-1 font-medium leading-tight">{errorMessage}</div>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             {/* Email Field */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-300 mb-1">
                 Email Address
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-3.5 h-3.5" />
                 </div>
                 <input
                   type="email"
@@ -235,19 +235,19 @@ export default function LoginView({ onLoginSuccess }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                 />
               </div>
             </div>
 
             {/* Password Field */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-300 mb-1">
                 Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-3.5 h-3.5" />
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -256,14 +256,14 @@ export default function LoginView({ onLoginSuccess }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-11 py-3 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  className="w-full pl-9 pr-10 py-2 sm:py-2.5 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
@@ -272,16 +272,16 @@ export default function LoginView({ onLoginSuccess }) {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 active:scale-[0.99] disabled:opacity-50 text-white font-semibold rounded-xl text-sm shadow-lg shadow-emerald-700/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full mt-2 py-2.5 sm:py-3 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 active:scale-[0.99] disabled:opacity-50 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-700/30 flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
             >
               {isLoading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Verifying Credentials...</span>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span className="whitespace-nowrap">Verifying Credentials...</span>
                 </>
               ) : (
                 <>
-                  <span>Sign In</span>
+                  <span className="whitespace-nowrap">Sign In</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -289,17 +289,17 @@ export default function LoginView({ onLoginSuccess }) {
           </form>
 
           {/* Closed Registration Notice */}
-          <div className="mt-6 pt-5 border-t border-slate-800 text-center">
-            <p className="text-xs text-slate-400 leading-relaxed">
-              New accounts are created strictly by administrators. Public self-registration is permanently disabled for system security.
+          <div className="mt-3.5 pt-3 border-t border-slate-800 text-center">
+            <p className="text-[11px] text-slate-400 leading-tight">
+              Administrative portal. Public registration permanently disabled for system security.
             </p>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="w-full text-center text-slate-500 text-xs py-2">
-        <p>ALI Garments Khata • Cloudflare D1 Native Edge Security</p>
+      <div className="w-full text-center text-slate-500 text-[11px] py-1 shrink-0">
+        <p>ALI Garments Khata • 5-Day Auto Security Verification</p>
       </div>
     </div>
   );

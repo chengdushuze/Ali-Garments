@@ -11,6 +11,32 @@ async function getAdminSession(request, env) {
   return session;
 }
 
+async function recordAudit(env, session, request, action, details) {
+  if (!env.DB) return;
+  try {
+    const clientIp = request.headers.get('CF-Connecting-IP') || 
+                     request.headers.get('x-real-ip') || 
+                     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     'client';
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_email TEXT,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.DB.prepare(
+      'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+    ).bind(session.userId || 1, session.email || 'admin', action, details, clientIp).run();
+  } catch (e) {
+    console.warn('Audit logging failed silently:', e);
+  }
+}
+
 // GET /api/admin/users - List all users
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -127,6 +153,8 @@ export async function onRequestPost(context) {
       }
     }
 
+    await recordAudit(env, session, request, 'USER_CREATED', `Created user ${cleanEmail} (${userRole})`);
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -211,6 +239,8 @@ export async function onRequestDelete(context) {
         throw new Error(data.errors?.[0]?.message || 'D1 delete failed');
       }
     }
+
+    await recordAudit(env, session, request, 'USER_DELETED', `Deleted user account #${id}`);
 
     return new Response(
       JSON.stringify({
@@ -357,6 +387,8 @@ export async function onRequestPatch(context) {
         });
       }
 
+      await recordAudit(env, session, request, 'PASSWORD_CHANGED', `Changed password for user account #${id}`);
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -390,6 +422,14 @@ export async function onRequestPatch(context) {
         });
       }
 
+      await recordAudit(
+        env,
+        session,
+        request,
+        safeStatus === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
+        `Updated user account #${id} status to ${safeStatus}`
+      );
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -404,8 +444,11 @@ export async function onRequestPatch(context) {
         }
       );
     }
-      }
-    );
+
+    return new Response(JSON.stringify({ error: 'No valid action provided.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Admin change password error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
