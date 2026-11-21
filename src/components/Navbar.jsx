@@ -21,15 +21,13 @@ export default function Navbar({
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Brand Left */}
+          {/* Brand Left with Custom Rana ALI Garments Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 p-0.5 shadow-md shadow-emerald-500/20 flex-shrink-0">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <span className="text-emerald-400 font-black text-sm tracking-tighter font-serif">
-                  AG
-                </span>
-              </div>
-            </div>
+            <img
+              src={settings.logoUrl || '/logo.png'}
+              alt="Rana ALI Garments Logo"
+              className="w-10 h-10 rounded-xl object-contain shadow-md shadow-emerald-500/20 flex-shrink-0 bg-white p-0.5 border border-slate-200 dark:border-slate-850 hover:scale-105 transition-transform"
+            />
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">

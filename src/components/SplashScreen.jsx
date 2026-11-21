@@ -25,25 +25,19 @@ export default function SplashScreen({ onComplete }) {
     >
       <div className="w-full flex justify-end pt-4">
         <span className="text-xs uppercase tracking-widest text-emerald-400/70 font-mono bg-emerald-950/80 border border-emerald-800/40 px-3 py-1 rounded-full">
-          v1.0.0 • Cloudflare D1
+          v1.0.0 • Digital Ledger
         </span>
       </div>
 
       <div className="flex flex-col items-center text-center space-y-6 my-auto">
-        {/* Luxury Garments Monogram / Logo */}
+        {/* Custom Official Rana ALI Garments Logo */}
         <div className="relative">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-1 shadow-2xl shadow-emerald-500/20 animate-pulse">
-            <div className="w-full h-full bg-slate-900 rounded-[22px] flex flex-col items-center justify-center p-3 border border-emerald-500/30">
-              <div className="relative flex items-center justify-center">
-                <span className="text-4xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-400 via-teal-200 to-amber-300 bg-clip-text text-transparent font-serif">
-                  AG
-                </span>
-                <Sparkles className="w-5 h-5 text-amber-300 absolute -top-2 -right-3 animate-spin" style={{ animationDuration: '6s' }} />
-              </div>
-              <span className="text-[10px] uppercase font-mono tracking-widest text-emerald-400 font-semibold mt-1">
-                EST. 2026
-              </span>
-            </div>
+          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white p-1.5 shadow-2xl shadow-emerald-500/30 border-2 border-emerald-500/40 hover:scale-105 transition-transform">
+            <img
+              src="/logo.png"
+              alt="Rana ALI Garments Logo"
+              className="w-full h-full object-contain rounded-2xl"
+            />
           </div>
         </div>
 
@@ -56,9 +50,9 @@ export default function SplashScreen({ onComplete }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300 font-medium bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-800">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Offline-First • Ultra-Optimized D1 Storage</span>
+          <span>Offline-First • Real-Time Cloud Khata</span>
         </div>
       </div>
 

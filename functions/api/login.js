@@ -90,7 +90,12 @@ export async function onRequestPost(context) {
     // 2. Query user from Cloudflare D1
     let user = null;
     if (env.DB) {
-      user = await env.DB.prepare('SELECT id, name, email, password_hash, role FROM users WHERE LOWER(email) = ?')
+      // Auto-ensure status column exists
+      try {
+        await env.DB.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
+      } catch (e) {}
+
+      user = await env.DB.prepare('SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ?')
         .bind(cleanEmail)
         .first();
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
@@ -102,12 +107,26 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, password_hash, role FROM users WHERE LOWER(email) = ? LIMIT 1',
+          sql: 'SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ? LIMIT 1',
           params: [cleanEmail],
         }),
       });
       const data = await res.json();
       user = data?.result?.[0]?.results?.[0] || null;
+    }
+
+    // Check if user is suspended
+    if (user && user.status === 'suspended') {
+      return new Response(
+        JSON.stringify({
+          error: 'Your account has been temporarily suspended by an administrator. Please contact management.',
+          isSuspended: true,
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     const isValid = user && (await verifyPassword(password, user.password_hash));
@@ -134,14 +153,14 @@ export async function onRequestPost(context) {
       // 500ms security delay on failed logins to prevent brute-force timing attacks
       await new Promise(r => setTimeout(r, 500));
 
+      // Do NOT reveal remaining attempt count to attacker before the 15-minute lock
       const message = remaining === 0
-        ? 'Invalid email or password. Maximum 3 failed attempts reached. Login locked for 15 minutes.'
-        : `Invalid email or password. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before 15-minute lock.`;
+        ? 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.'
+        : 'Invalid email or password.';
 
       return new Response(
         JSON.stringify({
           error: message,
-          remainingAttempts: remaining,
           isRateLimited: remaining === 0,
         }),
         {

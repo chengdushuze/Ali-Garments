@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT DEFAULT 'user', -- 'admin', 'user'
+    status TEXT DEFAULT 'active', -- 'active', 'suspended'
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

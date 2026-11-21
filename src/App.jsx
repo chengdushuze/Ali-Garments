@@ -720,10 +720,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-5">
-        {/* User-Isolated Data Management (/api/data) */}
-        <UserItemsManager currentUser={currentUser} />
-
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5">
         {/* Dashboard Analytics & Totals */}
         <DashboardStats
           customers={customers}
@@ -734,9 +731,9 @@ export default function App() {
         />
 
         {/* Master-Detail Ledger Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
           {/* Left Column: Customer Directory (4 cols on lg, full on mobile if no detail view) */}
-          <div className={`lg:col-span-5 h-[650px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
+          <div className={`lg:col-span-5 h-[580px] sm:h-[620px] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
             <CustomerList
               customers={customers}
               onSelectCustomer={cust => setSelectedCustomer(cust)}
@@ -747,7 +744,7 @@ export default function App() {
           </div>
 
           {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg) */}
-          <div className={`lg:col-span-7 h-[650px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
+          <div className={`lg:col-span-7 h-[580px] sm:h-[620px] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
             {selectedCustomer ? (
               <CustomerDetail
                 customer={selectedCustomer}

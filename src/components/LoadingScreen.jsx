@@ -8,7 +8,7 @@ export default function LoadingScreen({ message = 'Connecting to Secure Edge Ses
       <div className="w-full flex justify-end pt-2 sm:pt-4">
         <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-3 py-1 rounded-full shadow-sm">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Cloudflare Pages • D1 Native</span>
+          <span>Enterprise Secure Portal</span>
         </div>
       </div>
 
@@ -16,18 +16,12 @@ export default function LoadingScreen({ message = 'Connecting to Secure Edge Ses
       <div className="flex flex-col items-center text-center space-y-6 my-auto max-w-sm px-4">
         {/* Animated Brand Emblem */}
         <div className="relative">
-          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-tr from-emerald-600 via-teal-400 to-amber-300 p-1 shadow-2xl shadow-emerald-500/30 animate-pulse">
-            <div className="w-full h-full bg-slate-950 rounded-[22px] flex flex-col items-center justify-center p-3 border border-emerald-500/20">
-              <div className="relative flex items-center justify-center">
-                <span className="text-4xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-400 via-teal-200 to-amber-300 bg-clip-text text-transparent font-serif">
-                  AG
-                </span>
-                <Sparkles className="w-5 h-5 text-amber-300 absolute -top-2 -right-3 animate-spin" style={{ animationDuration: '8s' }} />
-              </div>
-              <span className="text-[9px] uppercase font-mono tracking-widest text-emerald-400 font-bold mt-1">
-                EST. 2026
-              </span>
-            </div>
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-white p-1 shadow-2xl shadow-emerald-500/30 border-2 border-emerald-500/40 animate-pulse flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="Rana ALI Garments Logo"
+              className="w-full h-full object-contain rounded-2xl"
+            />
           </div>
         </div>
 

@@ -2,6 +2,38 @@ import React, { useState } from 'react';
 import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { getCachedAuthUser, setCachedAuthUser } from '../services/storage';
 
+const RATE_LIMIT_MAX_ATTEMPTS = 3;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function getOfflineAttempts() {
+  try {
+    const raw = localStorage.getItem('ag_login_attempts');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
+    return Array.isArray(parsed) ? parsed.filter(t => typeof t === 'number' && t > cutoff) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function recordOfflineFailedAttempt() {
+  try {
+    const attempts = getOfflineAttempts();
+    attempts.push(Date.now());
+    localStorage.setItem('ag_login_attempts', JSON.stringify(attempts));
+    return attempts.length;
+  } catch (e) {
+    return 1;
+  }
+}
+
+function clearOfflineAttempts() {
+  try {
+    localStorage.removeItem('ag_login_attempts');
+  } catch (e) {}
+}
+
 export default function LoginView({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,6 +47,16 @@ export default function LoginView({ onLoginSuccess }) {
 
     if (!email.trim() || !password) {
       setErrorMessage('Please enter both your email and password.');
+      return;
+    }
+
+    // 1. Check Rate Limit (both APK offline & online)
+    const existingAttempts = getOfflineAttempts();
+    if (existingAttempts.length >= RATE_LIMIT_MAX_ATTEMPTS) {
+      const oldest = Math.min(...existingAttempts);
+      const waitMs = Math.max(0, oldest + RATE_LIMIT_WINDOW_MS - Date.now());
+      const minutesRemaining = Math.max(1, Math.ceil(waitMs / 60000));
+      setErrorMessage(`Too many failed login attempts (3 maximum). For your security, login is locked for ${minutesRemaining} minute${minutesRemaining > 1 ? 's' : ''}.`);
       return;
     }
 
@@ -40,20 +82,43 @@ export default function LoginView({ onLoginSuccess }) {
           }),
         });
       } catch (fetchErr) {
-        // Network offline or native platform without relative server
         console.warn('Network login failed, evaluating offline/native mode:', fetchErr);
       }
 
       if (response) {
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success && data.user) {
+          clearOfflineAttempts();
           await setCachedAuthUser(data.user);
           if (onLoginSuccess) {
             onLoginSuccess(data.user);
           }
           return;
         } else {
-          setErrorMessage(data.error || 'Invalid email or password.');
+          // If 403 Suspended
+          if (response.status === 403 || data.isSuspended) {
+            setErrorMessage(data.error || 'Your account has been temporarily suspended by an administrator.');
+            setIsLoading(false);
+            return;
+          }
+
+          // If 429 Rate limited
+          if (response.status === 429 || data.isRateLimited) {
+            recordOfflineFailedAttempt();
+            setErrorMessage(data.error || 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
+            setIsLoading(false);
+            return;
+          }
+
+          // Record failed attempt locally as well
+          const totalFailed = recordOfflineFailedAttempt();
+          if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
+            setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
+          } else {
+            // Do NOT reveal remaining attempt count to user before 15-minute lock
+            setErrorMessage('Invalid email or password.');
+          }
+
           setIsLoading(false);
           return;
         }
@@ -64,7 +129,15 @@ export default function LoginView({ onLoginSuccess }) {
         const cached = await getCachedAuthUser();
         const trimmedEmail = email.trim().toLowerCase();
 
+        // Check if cached user is suspended
+        if (cached && cached.status === 'suspended') {
+          setErrorMessage('Your account has been temporarily suspended by an administrator.');
+          setIsLoading(false);
+          return;
+        }
+
         if (cached && cached.email?.toLowerCase() === trimmedEmail) {
+          clearOfflineAttempts();
           if (onLoginSuccess) onLoginSuccess(cached);
           return;
         } else if (trimmedEmail === 'admin@aligarments.com' || isNative) {
@@ -72,15 +145,22 @@ export default function LoginView({ onLoginSuccess }) {
             id: 1,
             name: 'Ali Amir (Offline)',
             email: trimmedEmail,
-            role: 'admin'
+            role: 'admin',
+            status: 'active'
           };
+          clearOfflineAttempts();
           await setCachedAuthUser(fallbackUser);
           if (onLoginSuccess) onLoginSuccess(fallbackUser);
           return;
         }
       }
 
-      setErrorMessage('Invalid email or password.');
+      const totalFailed = recordOfflineFailedAttempt();
+      if (totalFailed >= RATE_LIMIT_MAX_ATTEMPTS) {
+        setErrorMessage('Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.');
+      } else {
+        setErrorMessage('Invalid email or password.');
+      }
     } catch (err) {
       console.error('Login request failed:', err);
       setErrorMessage('Something went wrong. Please check your connection and try again.');
@@ -95,9 +175,9 @@ export default function LoginView({ onLoginSuccess }) {
       <div className="w-full flex justify-between items-center max-w-md mx-auto pt-2">
         <div className="flex items-center gap-2.5">
           <img
-            src="/icon.svg"
-            alt="AG"
-            className="w-8 h-8 rounded-lg shadow-md shadow-emerald-500/20 object-contain"
+            src="/logo.png"
+            alt="Rana ALI Garments"
+            className="w-9 h-9 rounded-xl shadow-md shadow-emerald-500/20 object-contain bg-white p-0.5 border border-slate-700"
           />
           <span className="font-extrabold tracking-tight text-white text-base">
             ALI GARMENTS
@@ -112,13 +192,13 @@ export default function LoginView({ onLoginSuccess }) {
       {/* Login Card */}
       <div className="w-full max-w-md mx-auto my-auto py-6">
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/60">
-          {/* Header with Custom ALI Garments Logo */}
+          {/* Header with Custom Rana ALI Garments Logo */}
           <div className="text-center mb-6">
             <div className="flex justify-center mb-4">
               <img
-                src="/icon.svg"
-                alt="ALI Garments Logo"
-                className="w-16 h-16 rounded-2xl shadow-xl shadow-emerald-500/30 border border-emerald-500/40 object-contain hover:scale-105 transition-transform"
+                src="/logo.png"
+                alt="Rana ALI Garments Logo"
+                className="w-24 h-24 rounded-2xl shadow-2xl shadow-emerald-500/30 border-2 border-emerald-500/40 object-contain bg-white p-1 hover:scale-105 transition-transform"
               />
             </div>
             <h2 className="text-2xl font-bold text-white tracking-tight">

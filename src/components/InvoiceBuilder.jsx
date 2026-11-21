@@ -60,6 +60,7 @@ export default function InvoiceBuilder({
         setItems(
           selected.map(tx => ({
             id: tx.id,
+            date: tx.date || (tx.dateTime ? tx.dateTime.slice(0, 10) : now.toISOString().slice(0, 10)),
             description: tx.description || (tx.type === 'give' ? 'Garments Supplied' : 'Payment Received'),
             quantity: 1,
             rate: Math.abs(Number(tx.amount || 0)),
@@ -72,7 +73,7 @@ export default function InvoiceBuilder({
 
     // Default item
     setItems([
-      { id: '1', description: 'Premium Cotton / Fabric Rolls', quantity: 10, rate: 1200, amount: 12000 }
+      { id: '1', date: now.toISOString().slice(0, 10), description: 'Premium Cotton / Fabric Rolls', quantity: 10, rate: 1200, amount: 12000 }
     ]);
   }, [isOpen, customer, selectedTxIds]);
 
@@ -97,7 +98,7 @@ export default function InvoiceBuilder({
   const handleAddItem = () => {
     setItems([
       ...items,
-      { id: Date.now().toString(), description: '', quantity: 1, rate: 0, amount: 0 }
+      { id: Date.now().toString(), date: invoiceDate || new Date().toISOString().slice(0, 10), description: '', quantity: 1, rate: 0, amount: 0 }
     ]);
   };
 
@@ -197,12 +198,14 @@ export default function InvoiceBuilder({
                 <img
                   src={settings.logoUrl}
                   alt="Shop Logo"
-                  className="w-16 h-16 rounded-2xl object-contain border border-slate-200 dark:border-slate-700 p-1"
+                  className="w-16 h-16 rounded-2xl object-contain border border-slate-200 dark:border-slate-700 p-1 bg-white"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-serif font-black text-2xl shadow-md">
-                  AG
-                </div>
+                <img
+                  src="/logo.png"
+                  alt="Rana ALI Garments Logo"
+                  className="w-16 h-16 rounded-2xl object-contain border border-slate-200 dark:border-slate-700 p-0.5 bg-white shadow-sm"
+                />
               )}
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -222,14 +225,14 @@ export default function InvoiceBuilder({
             {/* Invoice Meta */}
             <div className="text-left sm:text-right space-y-1">
               <span className="inline-block px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                Tax Invoice
+                Tax Invoice & Receipt
               </span>
               <div className="text-xl font-bold font-mono text-slate-900 dark:text-white pt-1">
                 {invoiceNumber}
               </div>
-              <div className="text-xs text-slate-500 font-mono">
-                <div>Date: {invoiceDate}</div>
-                <div>Due Date: {dueDate}</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400 font-mono space-y-0.5">
+                <div><span className="font-semibold text-slate-800 dark:text-slate-200">Transaction Date:</span> {invoiceDate}</div>
+                <div><span className="font-semibold text-slate-800 dark:text-slate-200">Due Date:</span> {dueDate}</div>
               </div>
             </div>
           </div>
@@ -288,6 +291,7 @@ export default function InvoiceBuilder({
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300">
                   <th className="py-2.5 px-3 font-semibold">#</th>
+                  <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Tx Date</th>
                   <th className="py-2.5 px-3 font-semibold">Description / Garments Particulars</th>
                   <th className="py-2.5 px-3 font-semibold text-right">Qty</th>
                   <th className="py-2.5 px-3 font-semibold text-right">Rate ({currency})</th>
@@ -299,6 +303,14 @@ export default function InvoiceBuilder({
                 {items.map((item, idx) => (
                   <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                     <td className="py-2.5 px-3 font-mono text-slate-400">{idx + 1}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <input
+                        type="date"
+                        value={item.date || invoiceDate}
+                        onChange={e => handleItemChange(idx, 'date', e.target.value)}
+                        className="bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none p-1 font-mono text-xs w-28 text-slate-800 dark:text-slate-200"
+                      />
+                    </td>
                     <td className="py-2.5 px-3">
                       <input
                         type="text"

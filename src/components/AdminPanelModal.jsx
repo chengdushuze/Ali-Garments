@@ -15,7 +15,10 @@ import {
   Loader2,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  UserX,
+  UserCheck,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
@@ -38,6 +41,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+
+  // Suspend/Reactivate user state with admin consent verification
+  const [suspendingUser, setSuspendingUser] = useState(null);
+  const [suspendAdminPassword, setSuspendAdminPassword] = useState('');
+  const [showSuspendAdminPassword, setShowSuspendAdminPassword] = useState(false);
+  const [isTogglingSuspend, setIsTogglingSuspend] = useState(false);
+  const [suspendError, setSuspendError] = useState('');
 
   // Nightly Backup state
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -238,7 +248,58 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // 3. Trigger Nightly Backup to ali-graments-backup D1
+  // 4. Suspend or Reactivate User Handler with Admin Password Consent Verification
+  const handleToggleSuspend = async (e) => {
+    e.preventDefault();
+    setSuspendError('');
+
+    if (!suspendingUser) return;
+    if (!suspendAdminPassword) {
+      setSuspendError('You must enter your current admin password to verify consent.');
+      return;
+    }
+
+    const targetStatus = suspendingUser.status === 'suspended' ? 'active' : 'suspended';
+    setIsTogglingSuspend(true);
+
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: suspendingUser.id,
+          status: targetStatus,
+          adminPassword: suspendAdminPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        setSuspendError(data.error || 'Failed to update user status.');
+        setIsTogglingSuspend(false);
+        return;
+      }
+
+      setStatusMessage({
+        type: 'success',
+        text: targetStatus === 'suspended'
+          ? `User "${suspendingUser.name}" (${suspendingUser.email}) has been temporarily suspended.`
+          : `User "${suspendingUser.name}" (${suspendingUser.email}) has been successfully reactivated!`,
+      });
+
+      setSuspendingUser(null);
+      setSuspendAdminPassword('');
+      fetchUsers();
+    } catch (err) {
+      console.error('Toggle suspend error:', err);
+      setSuspendError('Failed to connect to server. Please try again.');
+    } finally {
+      setIsTogglingSuspend(false);
+    }
+  };
+
+  // 5. Trigger Nightly Backup to ali-graments-backup D1
   const handleTriggerBackup = async () => {
     setIsBackingUp(true);
     setBackupStatus(null);
@@ -330,8 +391,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       Automated Cron
                     </span>
                   </h4>
-                  <p className="text-[11px] text-slate-400 font-mono">
-                    Target: ali-graments-backup (087a12df-88ef-4633-b81f-af6bad7a2098)
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Target: Cloud Backup (ali-garments-backup)
                   </p>
                 </div>
               </div>
@@ -524,6 +585,15 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                             >
                               {u.role}
                             </span>
+                            <span
+                              className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded-full border ${
+                                u.status === 'suspended'
+                                  ? 'bg-rose-950/90 text-rose-300 border-rose-850/80'
+                                  : 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                              }`}
+                            >
+                              {u.status === 'suspended' ? 'Suspended' : 'Active'}
+                            </span>
                           </div>
                           <p className="text-xs text-slate-400 truncate mt-0.5">{u.email}</p>
                         </div>
@@ -532,6 +602,34 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                           <span className="text-[11px] text-slate-500 font-mono hidden sm:inline mr-1">
                             #{u.id}
                           </span>
+
+                          {/* Temporary Suspend / Reactivate User Button */}
+                          {!isSelf && (
+                            <button
+                              onClick={() => {
+                                setSuspendingUser(u);
+                                setSuspendAdminPassword('');
+                                setSuspendError('');
+                                setShowSuspendAdminPassword(false);
+                              }}
+                              title={
+                                u.status === 'suspended'
+                                  ? `Reactivate account for ${u.name}`
+                                  : `Temporarily suspend account for ${u.name}`
+                              }
+                              className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                                u.status === 'suspended'
+                                  ? 'text-emerald-400 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/50'
+                                  : 'text-amber-400 hover:text-rose-400 hover:bg-rose-950/40'
+                              }`}
+                            >
+                              {u.status === 'suspended' ? (
+                                <UserCheck className="w-4 h-4" />
+                              ) : (
+                                <UserX className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
 
                           {/* Change Password Button */}
                           <button
@@ -729,6 +827,128 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       <>
                         <Key className="w-3.5 h-3.5" />
                         <span>Confirm & Change Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Suspend / Reactivate Confirmation Dialog with Admin Consent */}
+        {suspendingUser && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2.5 rounded-xl border ${
+                    suspendingUser.status === 'suspended'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                  }`}>
+                    {suspendingUser.status === 'suspended' ? (
+                      <UserCheck className="w-5 h-5" />
+                    ) : (
+                      <ShieldAlert className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      {suspendingUser.status === 'suspended'
+                        ? `Reactivate ${suspendingUser.name}`
+                        : `Suspend ${suspendingUser.name}`}
+                    </h4>
+                    <p className="text-xs text-slate-400">{suspendingUser.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setSuspendingUser(null);
+                    setSuspendAdminPassword('');
+                    setSuspendError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {suspendError && (
+                <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span>{suspendError}</span>
+                </div>
+              )}
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {suspendingUser.status === 'suspended'
+                  ? 'Reactivating this account will restore this user\'s access to the portal immediately.'
+                  : 'Temporarily suspending this user will immediately revoke their ability to sign in until reactivated.'}
+              </p>
+
+              <form onSubmit={handleToggleSuspend} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Verify Admin Password
+                  </label>
+                  <p className="text-[11px] text-slate-400 mb-2">
+                    Enter your administrator password to authorize this action:
+                  </p>
+                  <div className="relative">
+                    <input
+                      type={showSuspendAdminPassword ? 'text' : 'password'}
+                      required
+                      value={suspendAdminPassword}
+                      onChange={(e) => setSuspendAdminPassword(e.target.value)}
+                      placeholder="Your current admin password"
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSuspendAdminPassword(!showSuspendAdminPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showSuspendAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSuspendingUser(null);
+                      setSuspendAdminPassword('');
+                      setSuspendError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isTogglingSuspend}
+                    className={`px-5 py-2 rounded-xl text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer ${
+                      suspendingUser.status === 'suspended'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95'
+                        : 'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95'
+                    }`}
+                  >
+                    {isTogglingSuspend ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying...</span>
+                      </>
+                    ) : suspendingUser.status === 'suspended' ? (
+                      <>
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Confirm Reactivation</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserX className="w-3.5 h-3.5" />
+                        <span>Confirm Suspension</span>
                       </>
                     )}
                   </button>
