@@ -53,24 +53,24 @@ export default function DashboardStats({
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Receivables (Lene Hain) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-emerald-100 dark:border-emerald-950/60 shadow-sm relative overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-emerald-100 dark:border-emerald-950/60 shadow-sm relative overflow-hidden min-w-0">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -mr-6 -mt-6"></div>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 whitespace-nowrap truncate">
               You'll Receive (لینے ہیں)
             </span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 shrink-0">
               <ArrowDownLeft className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 min-w-0">
             <div
               className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${currency} ${totalReceivable.toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">{currency}</span>
-              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalReceivable.toLocaleString()}</span>
+              <span className="text-lg sm:text-xl lg:text-lg xl:text-xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalReceivable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               From {customers.filter(c => (c.balance || 0) > 0).length} customers
@@ -79,24 +79,24 @@ export default function DashboardStats({
         </div>
 
         {/* Total Payables (Dene Hain) */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-rose-100 dark:border-rose-950/60 shadow-sm relative overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-rose-100 dark:border-rose-950/60 shadow-sm relative overflow-hidden min-w-0">
           <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl -mr-6 -mt-6"></div>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 whitespace-nowrap">
+            <span className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 whitespace-nowrap truncate">
               You'll Give (دینے ہیں)
             </span>
             <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shrink-0">
               <ArrowUpRight className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 min-w-0">
             <div
               className="flex items-baseline flex-nowrap gap-1.5 font-bold font-mono text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full"
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${currency} ${totalPayable.toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">{currency}</span>
-              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalPayable.toLocaleString()}</span>
+              <span className="text-lg sm:text-xl lg:text-lg xl:text-xl font-bold shrink-0 whitespace-nowrap tracking-tight">{totalPayable.toLocaleString()}</span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 whitespace-nowrap truncate">
               To {customers.filter(c => (c.balance || 0) < 0).length} suppliers/accounts
@@ -105,27 +105,27 @@ export default function DashboardStats({
         </div>
 
         {/* Net Business Balance */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap truncate">
               Net Balance (خالص بقایا)
             </span>
             <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
               <Wallet className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 min-w-0">
             <div
               className={`flex items-baseline flex-nowrap gap-1.5 font-bold font-mono tabular-nums whitespace-nowrap leading-none tracking-tight overflow-hidden max-w-full ${
                 netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
               }`}
-              style={{ whiteSpace: 'nowrap', display: 'flex', flexWrap: 'nowrap', alignItems: 'baseline' }}
+              style={{ whiteSpace: 'nowrap', display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'baseline' }}
               title={`${netBalance < 0 ? '-' : '+'} ${currency} ${Math.abs(netBalance).toLocaleString()}`}
             >
               <span className="text-xs sm:text-sm font-semibold opacity-90 shrink-0 whitespace-nowrap">
                 {netBalance < 0 ? '-' : '+'} {currency}
               </span>
-              <span className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold shrink-0 whitespace-nowrap tracking-tight">
+              <span className="text-lg sm:text-xl lg:text-lg xl:text-xl font-bold shrink-0 whitespace-nowrap tracking-tight">
                 {Math.abs(netBalance).toLocaleString()}
               </span>
             </div>
@@ -136,19 +136,19 @@ export default function DashboardStats({
         </div>
 
         {/* Today's Cash Flow */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap truncate">
               Today's Activity
             </span>
             <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center justify-between text-xs whitespace-nowrap">
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">In:&nbsp;+{currency}&nbsp;{todayCashIn.toLocaleString()}</span>
-              <span className="text-rose-600 dark:text-rose-400 font-medium whitespace-nowrap">Out:&nbsp;-{currency}&nbsp;{todayCreditGiven.toLocaleString()}</span>
+          <div className="mt-2 space-y-1 min-w-0">
+            <div className="flex items-center justify-between text-xs whitespace-nowrap gap-1">
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap truncate">In:&nbsp;+{currency}&nbsp;{todayCashIn.toLocaleString()}</span>
+              <span className="text-rose-600 dark:text-rose-400 font-medium whitespace-nowrap truncate">Out:&nbsp;-{currency}&nbsp;{todayCreditGiven.toLocaleString()}</span>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800 whitespace-nowrap truncate">
               {customers.length} total parties • {totalTxCount} entries

@@ -15,6 +15,9 @@ import SettingsModal from './components/SettingsModal';
 import DeleteConsentModal from './components/DeleteConsentModal';
 import RecycleBinModal from './components/RecycleBinModal';
 import PhoneBottomNav from './components/PhoneBottomNav';
+import MobileHeader from './components/MobileHeader';
+import MobileHeroCard from './components/MobileHeroCard';
+import MobileMenuDrawer from './components/MobileMenuDrawer';
 import AppLockScreen from './components/AppLockScreen';
 import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
@@ -252,6 +255,8 @@ export default function App() {
   const [invoiceCustomer, setInvoiceCustomer] = useState(null);
   const [invoiceTxIds, setInvoiceTxIds] = useState([]);
   const [mobileTab, setMobileTab] = useState('parties'); // 'parties' or 'stats' for Phone Menu
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobilePartyFilter, setMobilePartyFilter] = useState('all');
 
   // Recycle Bin & Consent state
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
@@ -800,7 +805,7 @@ export default function App() {
       {/* Splash Screen */}
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
 
-      {/* Header Navigation */}
+      {/* Header Navigation (Desktop) */}
       <Navbar
         theme={theme}
         toggleTheme={toggleTheme}
@@ -822,6 +827,20 @@ export default function App() {
         onLogout={() => setIsLogoutConsentOpen(true)}
       />
 
+      {/* Mobile-First Header (Rendered on phones / Android APK) */}
+      <MobileHeader
+        settings={settings}
+        currentUser={currentUser}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        recycleBinCount={recycleBinItems.length}
+        onOpenRecycleBin={() => setIsRecycleBinOpen(true)}
+        onOpenMenu={() => setIsMobileMenuOpen(true)}
+        onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+        syncState={syncState}
+        onSyncNow={handleSyncNow}
+      />
+
       {/* Offline Mode Banner */}
       {syncState.isOffline && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center justify-center gap-2 animate-fadeIn">
@@ -836,7 +855,24 @@ export default function App() {
       )}
 
       {/* Main Content Area (Responsive on all screen sizes, overflow-x-hidden, padding-bottom for Phone Menu) */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 pb-24 md:pb-8 overflow-x-hidden">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 pb-28 md:pb-8 overflow-x-hidden">
+        {/* Mobile Executive Hero Card (Shown on mobile when on parties tab and no party selected) */}
+        {!selectedCustomer && mobileTab === 'parties' && (
+          <MobileHeroCard
+            customers={customers}
+            transactionsMap={transactionsMap}
+            currency={settings.currency || 'Rs.'}
+            onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
+            onOpenInvoice={() => {
+              setInvoiceCustomer(selectedCustomer || customers[0]);
+              setInvoiceTxIds([]);
+              setIsInvoiceOpen(true);
+            }}
+            onOpenExcel={handleDownloadAllExcel}
+            onFilterChange={(tab) => setMobilePartyFilter(tab)}
+          />
+        )}
+
         {/* On Desktop: Always show stats. On Mobile/Phone: Show stats when Analytics tab active */}
         <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block' : 'hidden md:block'}`}>
           <DashboardStats
@@ -850,19 +886,20 @@ export default function App() {
 
         {/* Master-Detail Ledger Grid (Phone: CustomerList or CustomerDetail depending on selection; Desktop: side-by-side) */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start ${mobileTab === 'stats' ? 'hidden md:grid' : 'grid'}`}>
-          {/* Left Column: Customer Directory (4 cols on lg, full on mobile if no detail view) */}
-          <div className={`lg:col-span-5 h-[580px] sm:h-[620px] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
+          {/* Left Column: Customer Directory (5 cols on lg, full on mobile if no detail view) */}
+          <div className={`lg:col-span-5 h-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
             <CustomerList
               customers={customers}
               onSelectCustomer={cust => setSelectedCustomer(cust)}
               selectedCustomerId={selectedCustomer?.id}
               onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
               currency={settings.currency || 'Rs.'}
+              filterTabProp={mobilePartyFilter}
             />
           </div>
 
           {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg) */}
-          <div className={`lg:col-span-7 h-[580px] sm:h-[620px] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
+          <div className={`lg:col-span-7 h-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
             {selectedCustomer ? (
               <CustomerDetail
                 customer={selectedCustomer}
@@ -987,20 +1024,52 @@ export default function App() {
       <PhoneBottomNav
         activeTab={mobileTab}
         onSelectTab={(tab) => setMobileTab(tab)}
+        onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
         onOpenInvoice={() => {
           setInvoiceCustomer(selectedCustomer || customers[0]);
           setInvoiceTxIds([]);
           setIsInvoiceOpen(true);
         }}
-        onOpenExcel={handleDownloadAllExcel}
-        onOpenAdmin={() => setIsAdminPanelOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'super_admin'}
-        isSuperAdmin={currentUser?.role === 'super_admin'}
+        onOpenMenu={() => setIsMobileMenuOpen(true)}
         selectedCustomer={selectedCustomer}
         onBackToParties={() => {
           setSelectedCustomer(null);
           setMobileTab('parties');
+        }}
+      />
+
+      {/* 9. Mobile Menu Drawer (Executive Bottom Sheet for Phone / APK) */}
+      <MobileMenuDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        currentUser={currentUser}
+        settings={settings}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        recycleBinCount={recycleBinItems.length}
+        onOpenAdminPanel={() => {
+          setIsMobileMenuOpen(false);
+          setIsAdminPanelOpen(true);
+        }}
+        onOpenSettings={() => {
+          setIsMobileMenuOpen(false);
+          setIsSettingsOpen(true);
+        }}
+        onOpenRecycleBin={() => {
+          setIsMobileMenuOpen(false);
+          setIsRecycleBinOpen(true);
+        }}
+        onDownloadAllExcel={() => {
+          setIsMobileMenuOpen(false);
+          handleDownloadAllExcel();
+        }}
+        onSyncNow={() => {
+          handleSyncNow();
+        }}
+        syncState={syncState}
+        onLogout={() => {
+          setIsMobileMenuOpen(false);
+          setIsLogoutConsentOpen(true);
         }}
       />
 
