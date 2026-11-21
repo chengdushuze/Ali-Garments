@@ -44,9 +44,9 @@ export default function LoginView({ onLoginSuccess }) {
         console.warn('Network login failed, evaluating offline/native mode:', fetchErr);
       }
 
-      if (response && response.ok) {
+      if (response) {
         const data = await response.json().catch(() => ({}));
-        if (data.success && data.user) {
+        if (response.ok && data.success && data.user) {
           await setCachedAuthUser(data.user);
           if (onLoginSuccess) {
             onLoginSuccess(data.user);
@@ -59,7 +59,7 @@ export default function LoginView({ onLoginSuccess }) {
         }
       }
 
-      // Offline or native APK login fallback
+      // Offline or native APK login fallback (only when server is unreachable)
       if (!navigator.onLine || isNative || !response) {
         const cached = await getCachedAuthUser();
         const trimmedEmail = email.trim().toLowerCase();

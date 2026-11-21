@@ -66,9 +66,17 @@ CREATE TABLE IF NOT EXISTS recycle_bin (
     expires_at TEXT NOT NULL
 );
 
+-- 7. Login Attempts Table (Persistent Rate Limiting: Max 3 failed attempts in 15 minutes)
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identifier TEXT NOT NULL,
+    attempt_time INTEGER NOT NULL
+);
+
 -- Indexes for maximum query performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id);
 CREATE INDEX IF NOT EXISTS idx_customer_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_chunks_customer ON customer_chunks(customer_id);
 CREATE INDEX IF NOT EXISTS idx_recycle_expires ON recycle_bin(expires_at);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_time ON login_attempts(identifier, attempt_time);
