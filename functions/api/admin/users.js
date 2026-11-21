@@ -1,4 +1,4 @@
-import { verifySessionToken, hashPassword, verifyPassword, getSessionTokenFromRequest } from '../_auth.js';
+import { verifySessionToken, hashPassword, verifyPassword, getSessionTokenFromRequest, getSessionSecret, getCorsHeaders, encryptPassword } from '../_auth.js';
 
 const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
 const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
@@ -6,7 +6,7 @@ const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5
 async function getAdminSession(request, env) {
   const token = getSessionTokenFromRequest(request);
   if (!token) return null;
-  const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+  const secret = getSessionSecret(env);
   return await verifySessionToken(token, secret);
 }
 
@@ -39,14 +39,7 @@ async function recordAudit(env, session, request, action, details) {
 // GET /api/admin/users - List all users
 export async function onRequestGet(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -94,12 +87,15 @@ export async function onRequestGet(context) {
         ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run().catch(() => {});
       }
 
-      // Ensure last_login columns exist
+      // Ensure last_login and policy columns exist
       await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_ip TEXT').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_device TEXT').run().catch(() => {});
       await env.DB.prepare('ALTER TABLE users ADD COLUMN last_login_at DATETIME').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run().catch(() => {});
+      await env.DB.prepare('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1').run().catch(() => {});
 
-      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC').all();
+      const res = await env.DB.prepare('SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC').all();
       users = res.results || [];
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -110,7 +106,7 @@ export async function onRequestGet(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC',
+          sql: 'SELECT id, name, email, role, COALESCE(status, \'active\') as status, suspended_until, COALESCE(allow_vpn, 0) as allow_vpn, COALESCE(allow_foreign_access, 0) as allow_foreign_access, last_login_ip, last_login_device, last_login_at, created_at FROM users ORDER BY created_at DESC',
         }),
       });
       const data = await res.json();
@@ -133,14 +129,7 @@ export async function onRequestGet(context) {
 // POST /api/admin/users - Create new user account
 export async function onRequestPost(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -181,10 +170,14 @@ export async function onRequestPost(context) {
     const passwordHash = await hashPassword(password);
 
     if (env.DB) {
+      try {
+        await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run();
+      } catch (e) {}
+
       await env.DB.prepare(
-        'INSERT INTO users (name, email, password_hash, password_plain, role, status) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO users (name, email, password_hash, role, status, allow_vpn, token_version) VALUES (?, ?, ?, ?, ?, 0, 1)'
       )
-        .bind(name.trim(), cleanEmail, passwordHash, password, userRole, 'active')
+        .bind(name.trim(), cleanEmail, passwordHash, userRole, 'active')
         .run();
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
       const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -195,8 +188,8 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'INSERT INTO users (name, email, password_hash, password_plain, role, status) VALUES (?, ?, ?, ?, ?, ?)',
-          params: [name.trim(), cleanEmail, passwordHash, password, userRole, 'active'],
+          sql: 'INSERT INTO users (name, email, password_hash, role, status, allow_vpn, token_version) VALUES (?, ?, ?, ?, ?, 0, 1)',
+          params: [name.trim(), cleanEmail, passwordHash, userRole, 'active'],
         }),
       });
       const data = await res.json();
@@ -236,14 +229,7 @@ export async function onRequestPost(context) {
 // DELETE /api/admin/users?id=123 - Remove user account
 export async function onRequestDelete(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -346,14 +332,7 @@ export async function onRequestDelete(context) {
 // PATCH /api/admin/users - Change user password OR toggle user suspension status (with admin consent verification)
 export async function onRequestPatch(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -371,7 +350,7 @@ export async function onRequestPatch(context) {
   }
 
   try {
-    const { id, newPassword, status, durationDays, role, adminPassword } = await request.json().catch(() => ({}));
+    const { id, newPassword, status, durationDays, role, allowVpn, allowForeignAccess, adminPassword } = await request.json().catch(() => ({}));
 
     if (!id || !adminPassword) {
       return new Response(JSON.stringify({ error: 'User ID and admin verification password are required.' }), {
@@ -380,9 +359,9 @@ export async function onRequestPatch(context) {
       });
     }
 
-    // Must provide either newPassword, status, or role
-    if (!newPassword && !status && !role) {
-      return new Response(JSON.stringify({ error: 'Please specify a new password, status update, or role change.' }), {
+    // Must provide either newPassword, status, role, allowVpn, or allowForeignAccess
+    if (!newPassword && !status && !role && allowVpn === undefined && allowForeignAccess === undefined) {
+      return new Response(JSON.stringify({ error: 'Please specify a new password, status update, role change, VPN setting, or foreign access permission.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -533,9 +512,10 @@ export async function onRequestPatch(context) {
     // B) Change Password
     if (newPassword) {
       const passwordHash = await hashPassword(newPassword);
+
       if (env.DB) {
-        await env.DB.prepare('UPDATE users SET password_hash = ?, password_plain = ? WHERE id = ?')
-          .bind(passwordHash, newPassword, id)
+        await env.DB.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 1) + 1, password_plain = NULL WHERE id = ?')
+          .bind(passwordHash, id)
           .run();
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
@@ -546,18 +526,18 @@ export async function onRequestPatch(context) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            sql: 'UPDATE users SET password_hash = ?, password_plain = ? WHERE id = ?',
-            params: [passwordHash, newPassword, id],
+            sql: 'UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 1) + 1, password_plain = NULL WHERE id = ?',
+            params: [passwordHash, id],
           }),
         });
       }
 
-      await recordAudit(env, session, request, 'PASSWORD_CHANGED', `Changed password for user account #${id}`);
+      await recordAudit(env, session, request, 'PASSWORD_CHANGED', `Changed password for user account #${id} (Session invalidated)`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          message: 'Password successfully updated after verified admin authorization.',
+          message: 'Password successfully updated and all active user sessions have been terminated.',
         }),
         {
           status: 200,
@@ -573,7 +553,7 @@ export async function onRequestPatch(context) {
       const suspendedUntil = safeStatus === 'suspended' && days > 0 ? (Date.now() + (days * 24 * 60 * 60 * 1000)) : null;
 
       if (env.DB) {
-        await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ? WHERE id = ?')
+        await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?')
           .bind(safeStatus, suspendedUntil, id)
           .run();
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
@@ -585,7 +565,7 @@ export async function onRequestPatch(context) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            sql: 'UPDATE users SET status = ?, suspended_until = ? WHERE id = ?',
+            sql: 'UPDATE users SET status = ?, suspended_until = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?',
             params: [safeStatus, suspendedUntil, id],
           }),
         });
@@ -608,8 +588,79 @@ export async function onRequestPatch(context) {
           status: safeStatus,
           suspended_until: suspendedUntil,
           message: safeStatus === 'suspended'
-            ? `User account has been temporarily suspended${durationText}.`
+            ? `User account has been temporarily suspended${durationText}. All sessions terminated.`
             : 'User account has been successfully reactivated.',
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // D) Allow VPN / Proxy Toggle
+    if (allowVpn !== undefined) {
+      const vpnVal = allowVpn ? 1 : 0;
+      if (env.DB) {
+        try {
+          await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run();
+        } catch (e) {}
+        await env.DB.prepare('UPDATE users SET allow_vpn = ? WHERE id = ?').bind(vpnVal, id).run();
+      } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+        const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql: 'UPDATE users SET allow_vpn = ? WHERE id = ?', params: [vpnVal, id] }),
+        });
+      }
+
+      await recordAudit(env, session, request, 'USER_VPN_POLICY', `Admin changed user #${id} VPN permission to ${vpnVal ? 'ALLOWED' : 'BLOCKED'}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          allow_vpn: vpnVal,
+          message: `VPN/Proxy access for this user is now ${vpnVal ? 'ALLOWED' : 'BLOCKED'}.`,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // E) Allow Foreign Access (Outside Pakistan) Toggle - Strictly Super Admin only
+    if (allowForeignAccess !== undefined) {
+      if (session.role !== 'super_admin') {
+        return new Response(
+          JSON.stringify({ error: 'Only Super Admin has authority to grant foreign access permissions.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const foreignVal = allowForeignAccess ? 1 : 0;
+      if (env.DB) {
+        try {
+          await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run();
+        } catch (e) {}
+        await env.DB.prepare('UPDATE users SET allow_foreign_access = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?').bind(foreignVal, id).run();
+      } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
+        const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql: 'UPDATE users SET allow_foreign_access = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?', params: [foreignVal, id] }),
+        });
+      }
+
+      await recordAudit(env, session, request, 'USER_FOREIGN_POLICY', `Super Admin changed user #${id} foreign access permission to ${foreignVal ? 'ALLOWED' : 'BLOCKED'}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          allow_foreign_access: foreignVal,
+          message: `Foreign access (outside Pakistan) for this user is now ${foreignVal ? 'ALLOWED' : 'BLOCKED'}. All active sessions invalidated.`,
         }),
         {
           status: 200,
@@ -620,7 +671,7 @@ export async function onRequestPatch(context) {
 
     return new Response(JSON.stringify({ error: 'No valid action provided.' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Admin change password error:', error);

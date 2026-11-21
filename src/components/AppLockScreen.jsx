@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X } from 'lucide-react';
+import { ShieldCheck, Lock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X, Clock } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
+
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_STORAGE_KEY = 'ag_app_lock_lockout_until';
+const ATTEMPTS_STORAGE_KEY = 'ag_app_lock_failed_attempts';
 
 export default function AppLockScreen({
   isLocked,
@@ -17,6 +21,26 @@ export default function AppLockScreen({
   const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [fallbackError, setFallbackError] = useState('');
 
+  // Android-style Rate Limiting & Lockout Countdown
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
+
+  // Check lockout on mount & state change
+  useEffect(() => {
+    const checkLockout = () => {
+      try {
+        const storedLockout = Number(sessionStorage.getItem(LOCKOUT_STORAGE_KEY) || 0);
+        const remaining = Math.max(0, Math.ceil((storedLockout - Date.now()) / 1000));
+        setLockoutSecondsLeft(remaining);
+      } catch (e) {
+        setLockoutSecondsLeft(0);
+      }
+    };
+
+    checkLockout();
+    const interval = setInterval(checkLockout, 1000);
+    return () => clearInterval(interval);
+  }, [isLocked]);
+
   // Reset state when locked status changes
   useEffect(() => {
     if (isLocked) {
@@ -30,7 +54,7 @@ export default function AppLockScreen({
 
   // Support physical keyboard typing
   useEffect(() => {
-    if (!isLocked || showPasswordFallback) return;
+    if (!isLocked || showPasswordFallback || lockoutSecondsLeft > 0) return;
 
     const handleKeyDown = (e) => {
       if (e.key >= '0' && e.key <= '9') {
@@ -42,20 +66,56 @@ export default function AppLockScreen({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLocked, enteredPin, showPasswordFallback]);
+  }, [isLocked, enteredPin, showPasswordFallback, lockoutSecondsLeft]);
 
   if (!isLocked) return null;
+
+  const triggerHaptic = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(15);
+      } catch (e) {}
+    }
+  };
 
   const triggerError = (msg) => {
     setErrorMessage(msg);
     setIsShaking(true);
     setEnteredPin('');
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate([40, 60, 40]);
+      } catch (e) {}
+    }
     setTimeout(() => {
       setIsShaking(false);
     }, 600);
   };
 
+  const recordFailedAttempt = () => {
+    try {
+      const currentAttempts = Number(sessionStorage.getItem(ATTEMPTS_STORAGE_KEY) || 0) + 1;
+      sessionStorage.setItem(ATTEMPTS_STORAGE_KEY, String(currentAttempts));
+
+      if (currentAttempts >= MAX_FAILED_ATTEMPTS) {
+        const lockoutDuration = currentAttempts >= 8 ? 60 : 30; // 30s or 60s
+        const lockoutUntil = Date.now() + lockoutDuration * 1000;
+        sessionStorage.setItem(LOCKOUT_STORAGE_KEY, String(lockoutUntil));
+        setLockoutSecondsLeft(lockoutDuration);
+        triggerError(`Too many incorrect attempts. App locked for ${lockoutDuration} seconds.`);
+      } else {
+        const remaining = MAX_FAILED_ATTEMPTS - currentAttempts;
+        triggerError(`Incorrect PIN. ${remaining} attempt${remaining > 1 ? 's' : ''} remaining.`);
+      }
+    } catch (e) {
+      triggerError('Incorrect PIN. Please try again.');
+    }
+  };
+
   const handleDigit = (digit) => {
+    if (lockoutSecondsLeft > 0) return;
+    triggerHaptic();
+
     if (enteredPin.length >= 4) return;
     const nextPin = enteredPin + digit;
     setEnteredPin(nextPin);
@@ -64,19 +124,28 @@ export default function AppLockScreen({
     if (nextPin.length === 4) {
       // Validate PIN
       if (nextPin === configuredPin) {
+        // Clear failed attempts upon success
+        try {
+          sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
+          sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
+        } catch (e) {}
         onUnlock();
       } else {
-        triggerError('Incorrect PIN. Please try again.');
+        recordFailedAttempt();
       }
     }
   };
 
   const handleBackspace = () => {
+    if (lockoutSecondsLeft > 0) return;
+    triggerHaptic();
     setEnteredPin(prev => prev.slice(0, -1));
     setErrorMessage('');
   };
 
   const handleClear = () => {
+    if (lockoutSecondsLeft > 0) return;
+    triggerHaptic();
     setEnteredPin('');
     setErrorMessage('');
   };
@@ -104,6 +173,10 @@ export default function AppLockScreen({
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        try {
+          sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
+          sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
+        } catch (e) {}
         onUnlock();
       } else {
         setFallbackError(data.error || 'Incorrect account password.');
@@ -114,6 +187,8 @@ export default function AppLockScreen({
       setIsVerifyingPassword(false);
     }
   };
+
+  const isLockedOut = lockoutSecondsLeft > 0;
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none animate-in fade-in duration-300">
@@ -154,9 +229,11 @@ export default function AppLockScreen({
                 return (
                   <div
                     key={idx}
-                    className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
+                    className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                       isFilled
                         ? 'bg-emerald-400 border-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.8)] scale-110'
+                        : isLockedOut
+                        ? 'bg-rose-950/50 border-rose-800'
                         : 'bg-slate-900 border-slate-700'
                     }`}
                   />
@@ -164,24 +241,38 @@ export default function AppLockScreen({
               })}
             </div>
 
-            {/* Error Message */}
-            <div className="h-6 mb-2 flex items-center justify-center">
-              {errorMessage && (
+            {/* Error & Lockout Countdown Message */}
+            <div className="h-7 mb-2 flex items-center justify-center text-center px-2">
+              {isLockedOut ? (
+                <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5 animate-pulse bg-rose-950/50 border border-rose-800/60 px-3 py-1 rounded-full">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Too many attempts. Try again in {lockoutSecondsLeft}s</span>
+                </span>
+              ) : errorMessage ? (
                 <span className="text-xs font-semibold text-rose-400 flex items-center gap-1 animate-in fade-in">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   {errorMessage}
                 </span>
-              )}
+              ) : null}
             </div>
 
-            {/* Numeric Keypad (Optimized for Mobile APK & Desktop) */}
+            {/* Ultra-Smooth Numeric Keypad (Optimized for Android APK & Mobile Touch) */}
             <div className="grid grid-cols-3 gap-3 w-64 mt-1 mb-6">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <button
                   key={num}
                   type="button"
-                  onClick={() => handleDigit(String(num))}
-                  className="h-14 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:bg-emerald-600/30 active:scale-95 text-xl font-bold text-white border border-slate-800 transition-all shadow-sm flex items-center justify-center cursor-pointer"
+                  disabled={isLockedOut}
+                  style={{ touchAction: 'manipulation' }}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    handleDigit(String(num));
+                  }}
+                  className={`h-14 rounded-2xl text-xl font-bold border transition-all shadow-sm flex items-center justify-center select-none ${
+                    isLockedOut
+                      ? 'bg-slate-900/40 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
+                      : 'bg-slate-900/90 hover:bg-slate-800 active:bg-emerald-600/40 active:scale-90 active:border-emerald-500/60 text-white border-slate-800 cursor-pointer'
+                  }`}
                 >
                   {num}
                 </button>
@@ -190,8 +281,17 @@ export default function AppLockScreen({
               {/* Clear button */}
               <button
                 type="button"
-                onClick={handleClear}
-                className="h-14 rounded-2xl bg-slate-900/40 hover:bg-slate-800 text-xs font-bold text-slate-400 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+                disabled={isLockedOut}
+                style={{ touchAction: 'manipulation' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  handleClear();
+                }}
+                className={`h-14 rounded-2xl text-xs font-bold transition-all flex items-center justify-center select-none ${
+                  isLockedOut
+                    ? 'bg-slate-900/20 text-slate-600 cursor-not-allowed opacity-50'
+                    : 'bg-slate-900/40 hover:bg-slate-800 text-slate-400 active:scale-90 active:bg-slate-800 cursor-pointer'
+                }`}
               >
                 Clear
               </button>
@@ -199,8 +299,17 @@ export default function AppLockScreen({
               {/* Zero */}
               <button
                 type="button"
-                onClick={() => handleDigit('0')}
-                className="h-14 rounded-2xl bg-slate-900/90 hover:bg-slate-800 active:bg-emerald-600/30 active:scale-95 text-xl font-bold text-white border border-slate-800 transition-all shadow-sm flex items-center justify-center cursor-pointer"
+                disabled={isLockedOut}
+                style={{ touchAction: 'manipulation' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  handleDigit('0');
+                }}
+                className={`h-14 rounded-2xl text-xl font-bold border transition-all shadow-sm flex items-center justify-center select-none ${
+                  isLockedOut
+                    ? 'bg-slate-900/40 border-slate-800 text-slate-600 cursor-not-allowed opacity-50'
+                    : 'bg-slate-900/90 hover:bg-slate-800 active:bg-emerald-600/40 active:scale-90 active:border-emerald-500/60 text-white border-slate-800 cursor-pointer'
+                }`}
               >
                 0
               </button>
@@ -208,8 +317,17 @@ export default function AppLockScreen({
               {/* Backspace */}
               <button
                 type="button"
-                onClick={handleBackspace}
-                className="h-14 rounded-2xl bg-slate-900/40 hover:bg-slate-800 text-slate-300 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+                disabled={isLockedOut}
+                style={{ touchAction: 'manipulation' }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  handleBackspace();
+                }}
+                className={`h-14 rounded-2xl transition-all flex items-center justify-center select-none ${
+                  isLockedOut
+                    ? 'bg-slate-900/20 text-slate-600 cursor-not-allowed opacity-50'
+                    : 'bg-slate-900/40 hover:bg-slate-800 text-slate-300 active:scale-90 active:bg-slate-800 cursor-pointer'
+                }`}
                 title="Backspace"
               >
                 <Delete className="w-5 h-5" />
@@ -260,7 +378,7 @@ export default function AppLockScreen({
                 <button
                   type="button"
                   onClick={() => setShowAccountPassword(!showAccountPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                 >
                   {showAccountPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -276,14 +394,14 @@ export default function AppLockScreen({
                 <button
                   type="button"
                   onClick={() => setShowPasswordFallback(false)}
-                  className="flex-1 py-2 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+                  className="flex-1 py-2 rounded-xl border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   Back to PIN
                 </button>
                 <button
                   type="submit"
                   disabled={isVerifyingPassword}
-                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   {isVerifyingPassword ? 'Verifying...' : 'Unlock App'}
                 </button>

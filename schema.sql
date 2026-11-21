@@ -9,8 +9,15 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'user', -- 'admin', 'user'
+    role TEXT DEFAULT 'user', -- 'super_admin', 'admin', 'user'
     status TEXT DEFAULT 'active', -- 'active', 'suspended'
+    allow_vpn INTEGER DEFAULT 0, -- 0 = Block VPN, 1 = Allow VPN
+    allow_foreign_access INTEGER DEFAULT 0, -- 0 = Pakistan Only, 1 = Allow Foreign Access
+    token_version INTEGER DEFAULT 1, -- Multi-device session revocation version
+    suspended_until INTEGER, -- Epoch ms when suspension expires (NULL = indefinite or active)
+    last_login_ip TEXT,
+    last_login_device TEXT,
+    last_login_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

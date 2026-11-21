@@ -1,0 +1,15 @@
+# Cursor / AI Rules for ALI Garments
+# Refer to SECURITY_INSTRUCTIONS.md for full details
+
+- NEVER re-introduce plaintext passwords or password_plain columns.
+- NEVER implement "Reveal Password" features; use "Change / Reset Password" only.
+- NEVER expose Cloudflare D1 Account ID, Database ID, or API Tokens in client-side settings, localStorage, or Git commits.
+- ALWAYS use prepared statements (stmt.bind) for SQL execution.
+- Maintain token_version in the users table to instantly invalidate sessions on logout, suspension, or password changes.
+- Ensure the app ALWAYS launches on the Main / Home screen (setSelectedCustomer(null)), never defaulting to 4 Season G9.
+- Keep "You Gave" and "You Got" transaction buttons sticky at the bottom of CustomerDetail view.
+- In AppLockScreen, preserve touch-action: manipulation, fast response, and Android-style 5-attempt rate limiting with 30s lockout countdown.
+- In SettingsModal, keep it full-screen on mobile (no cramped popups) and never display Cloudflare D1 keys.
+- Strictly block VPN/Proxy connections unless allow_vpn == 1 for that user.
+- Hide Super Admin audit trails from standard admins; only Super Admin can delete specific audit logs; allow admins to download audit trails.
+- Optimize Cloudflare Worker credits: do not poll in tight loops; cache static assets.

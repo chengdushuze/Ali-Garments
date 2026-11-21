@@ -1,23 +1,16 @@
-import { verifySessionToken, getSessionTokenFromRequest } from '../_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest, getSessionSecret, getCorsHeaders } from '../_auth.js';
 
 async function getAdminSession(request, env) {
   const token = getSessionTokenFromRequest(request);
   if (!token) return null;
-  const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+  const secret = getSessionSecret(env);
   return await verifySessionToken(token, secret);
 }
 
 // GET /api/admin/backup - Retrieve the latest backup status and timestamp
 export async function onRequestGet(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -81,19 +74,20 @@ export async function onRequestGet(context) {
 // POST /api/admin/backup - Perform complete backup from primary D1 to ali-graments-backup D1
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   if (session.role !== 'admin' && session.role !== 'super_admin') {
     return new Response(JSON.stringify({ error: 'Forbidden. Admin privileges required.' }), {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -293,13 +287,10 @@ export async function onRequestPost(context) {
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request);
   return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    },
+    status: 204,
+    headers: corsHeaders,
   });
 }

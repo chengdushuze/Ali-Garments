@@ -16,9 +16,6 @@ const DEFAULT_SETTINGS = {
   ntn: 'NTN-786014-9',
   currency: 'Rs.',
   logoUrl: '', // Base64 or URL
-  d1AccountId: '539f9c0944aec5d144b69a9cb0ed123f',
-  d1DatabaseId: '5fbfb37e-e24a-4b51-9401-e861ff4b6dc1',
-  d1ApiToken: '',
   d1ProxyUrl: '/api/d1',
   bankName: 'Meezan Bank Limited',
   accountTitle: 'ALI GARMENTS',

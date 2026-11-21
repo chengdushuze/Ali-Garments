@@ -82,14 +82,17 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [suspendError, setSuspendError] = useState('');
   const [suspendDurationDays, setSuspendDurationDays] = useState('7');
 
-  // Reveal Real Password state (Requires Super Admin Password)
-  const [revealPasswordUser, setRevealPasswordUser] = useState(null);
-  const [revealSuperAdminPassword, setRevealSuperAdminPassword] = useState('');
-  const [showRevealSuperAdminPassword, setShowRevealSuperAdminPassword] = useState(false);
-  const [revealedPassword, setRevealedPassword] = useState('');
-  const [isRevealingPassword, setIsRevealingPassword] = useState(false);
-  const [revealPasswordError, setRevealPasswordError] = useState('');
-  const [copiedPassword, setCopiedPassword] = useState(false);
+  // VPN Policy Toggle State
+  const [vpnToggleTarget, setVpnToggleTarget] = useState(null);
+  const [vpnAdminPassword, setVpnAdminPassword] = useState('');
+  const [vpnError, setVpnError] = useState('');
+  const [isUpdatingVpn, setIsUpdatingVpn] = useState(false);
+
+  // Foreign Access Policy Toggle State (Super Admin Only)
+  const [foreignToggleTarget, setForeignToggleTarget] = useState(null);
+  const [foreignAdminPassword, setForeignAdminPassword] = useState('');
+  const [foreignError, setForeignError] = useState('');
+  const [isUpdatingForeign, setIsUpdatingForeign] = useState(false);
 
   // Audit Log State
   const [auditLogs, setAuditLogs] = useState([]);
@@ -541,33 +544,109 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
     }
   };
 
-  // 6. Reveal Real Password Handler (Requires Super Admin Password)
-  const handleRevealPassword = async (e) => {
+  // 6. VPN Policy Toggle Handlers
+  const handleToggleVpn = (target) => {
+    setVpnToggleTarget(target);
+    setVpnAdminPassword('');
+    setVpnError('');
+  };
+
+  const handleConfirmToggleVpn = async (e) => {
     e.preventDefault();
-    if (!revealPasswordUser || !revealSuperAdminPassword) return;
-    setIsRevealingPassword(true);
-    setRevealPasswordError('');
+    if (!vpnToggleTarget) return;
+
+    if (!vpnAdminPassword) {
+      setVpnError('Admin verification password is required.');
+      return;
+    }
+
+    setIsUpdatingVpn(true);
+    setVpnError('');
 
     try {
-      const res = await apiFetch('/api/admin/reveal-password', {
-        method: 'POST',
+      const nextVal = vpnToggleTarget.allow_vpn ? 0 : 1;
+      const res = await apiFetch('/api/admin/users', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: revealPasswordUser.id,
-          superAdminPassword: revealSuperAdminPassword,
+          id: vpnToggleTarget.id,
+          allowVpn: nextVal,
+          adminPassword: vpnAdminPassword,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setRevealPasswordError(data.error || 'Failed to reveal password.');
-      } else {
-        setRevealedPassword(data.password);
+        setVpnError(data.error || 'Failed to update VPN permission.');
+        return;
       }
+
+      setStatusMessage({
+        type: 'success',
+        text: `VPN/Proxy access for "${vpnToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED'}.`,
+      });
+
+      setVpnToggleTarget(null);
+      setVpnAdminPassword('');
+      fetchUsers();
     } catch (err) {
-      setRevealPasswordError('Network error while requesting password.');
+      console.error('VPN policy update error:', err);
+      setVpnError('Network error while updating VPN permission. Please try again.');
     } finally {
-      setIsRevealingPassword(false);
+      setIsUpdatingVpn(false);
+    }
+  };
+
+  // 7. Foreign Access Policy Toggle Handlers (Super Admin Only)
+  const handleToggleForeign = (target) => {
+    setForeignToggleTarget(target);
+    setForeignAdminPassword('');
+    setForeignError('');
+  };
+
+  const handleConfirmToggleForeign = async (e) => {
+    e.preventDefault();
+    if (!foreignToggleTarget) return;
+
+    if (!foreignAdminPassword) {
+      setForeignError('Admin verification password is required.');
+      return;
+    }
+
+    setIsUpdatingForeign(true);
+    setForeignError('');
+
+    try {
+      const nextVal = foreignToggleTarget.allow_foreign_access ? 0 : 1;
+      const res = await apiFetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: foreignToggleTarget.id,
+          allowForeignAccess: nextVal,
+          adminPassword: foreignAdminPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setForeignError(data.error || 'Failed to update foreign access permission.');
+        return;
+      }
+
+      setStatusMessage({
+        type: 'success',
+        text: `Foreign access (outside PK) for "${foreignToggleTarget.name}" is now ${nextVal ? 'ALLOWED' : 'BLOCKED'}.`,
+      });
+
+      setForeignToggleTarget(null);
+      setForeignAdminPassword('');
+      fetchUsers();
+    } catch (err) {
+      console.error('Foreign access policy update error:', err);
+      setForeignError('Network error while updating foreign access permission. Please try again.');
+    } finally {
+      setIsUpdatingForeign(false);
     }
   };
 
@@ -1104,20 +1183,54 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                 </button>
                               )}
 
-                              {/* Reveal Real Password Button (Super Admin Verification) */}
+                              {/* Change / Reset Password Button */}
                               <button
                                 onClick={() => {
-                                  setRevealPasswordUser(u);
-                                  setRevealSuperAdminPassword('');
-                                  setRevealedPassword('');
-                                  setRevealPasswordError('');
-                                  setCopiedPassword(false);
+                                  setPasswordResetUser(u);
+                                  setAdminVerificationPassword('');
+                                  setNewPassword('');
+                                  setConfirmNewPassword('');
+                                  setPasswordError('');
+                                  setShowNewPassword(false);
+                                  setShowAdminPassword(false);
                                 }}
-                                title={`Reveal Real Password for ${u.name} (Requires Super Admin Password)`}
+                                title={`Change / Reset Password for ${u.name}`}
                                 className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-emerald-950/40 transition-colors cursor-pointer"
                               >
-                                <Eye className="w-4 h-4 text-emerald-400" />
+                                <Key className="w-4 h-4 text-emerald-400" />
                               </button>
+
+                              {/* VPN / Proxy Policy Toggle */}
+                              {!isSuper && (
+                                <button
+                                  onClick={() => handleToggleVpn(u)}
+                                  title={`VPN/Proxy access is currently ${u.allow_vpn ? 'ALLOWED' : 'BLOCKED'}. Click to toggle.`}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border flex items-center gap-1 ${
+                                    u.allow_vpn
+                                      ? 'bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border-emerald-700/60'
+                                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+                                  }`}
+                                >
+                                  <Globe className="w-3 h-3" />
+                                  <span>VPN: {u.allow_vpn ? 'Allowed' : 'Blocked'}</span>
+                                </button>
+                              )}
+
+                              {/* Foreign Access (Outside Pakistan) Policy Toggle - Super Admin Only */}
+                              {currentUser?.role === 'super_admin' && !isSuper && (
+                                <button
+                                  onClick={() => handleToggleForeign(u)}
+                                  title={`Foreign access (outside Pakistan) is currently ${u.allow_foreign_access ? 'ALLOWED' : 'BLOCKED (PK Only)'}. Click to toggle.`}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer border flex items-center gap-1 ${
+                                    u.allow_foreign_access
+                                      ? 'bg-blue-950/70 hover:bg-blue-900 text-blue-300 border-blue-700/60'
+                                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+                                  }`}
+                                >
+                                  <Globe className="w-3 h-3 text-blue-400" />
+                                  <span>Foreign: {u.allow_foreign_access ? 'Allowed' : 'PK Only'}</span>
+                                </button>
+                              )}
 
                               {/* Temporary Suspend / Reactivate User Button */}
                               {isSuper ? (
@@ -1757,26 +1870,20 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           </div>
         )}
 
-        {/* Reveal Password Modal (Requires Super Admin Password) */}
-        {revealPasswordUser && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+        {/* Website Own Popup: VPN Policy Toggle Modal */}
+        {vpnToggleTarget && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <Eye className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white text-base">Reveal Real Password</h4>
-                    <p className="text-xs text-slate-400">{revealPasswordUser.name} ({revealPasswordUser.email})</p>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-emerald-400" />
+                  <h4 className="text-sm font-bold text-white">VPN / Proxy Policy • وی پی این پالیسی</h4>
                 </div>
                 <button
                   onClick={() => {
-                    setRevealPasswordUser(null);
-                    setRevealSuperAdminPassword('');
-                    setRevealedPassword('');
-                    setRevealPasswordError('');
+                    setVpnToggleTarget(null);
+                    setVpnAdminPassword('');
+                    setVpnError('');
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                 >
@@ -1784,115 +1891,146 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                 </button>
               </div>
 
-              {revealPasswordError && (
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5">
+                <p className="text-slate-300">
+                  Target Status: <strong className={vpnToggleTarget.allow_vpn ? 'text-rose-400' : 'text-emerald-400'}>
+                    {vpnToggleTarget.allow_vpn ? 'BLOCK VPN / PROXY ACCESS' : 'ALLOW VPN / PROXY ACCESS'}
+                  </strong>
+                </p>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  {vpnToggleTarget.allow_vpn
+                    ? 'When blocked, this user will be prevented from signing in or accessing the portal from any VPN, proxy, or datacenter network.'
+                    : 'When allowed, this user will be authorized to access the portal even while using a VPN or Proxy.'}
+                </p>
+              </div>
+
+              {vpnError && (
                 <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span>{revealPasswordError}</span>
+                  <span>{vpnError}</span>
                 </div>
               )}
 
-              {!revealedPassword ? (
-                <form onSubmit={handleRevealPassword} className="space-y-4">
-                  <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300/90 text-xs">
-                    Security Requirement: To view the real password of this account, you must enter the Super Admin password.
-                  </div>
+              <form onSubmit={handleConfirmToggleVpn} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Enter Admin Password to Authorize
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={vpnAdminPassword}
+                    onChange={(e) => setVpnAdminPassword(e.target.value)}
+                    placeholder="Your Administrator Password"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
-                      Enter Super Admin Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showRevealSuperAdminPassword ? 'text' : 'password'}
-                        required
-                        value={revealSuperAdminPassword}
-                        onChange={(e) => setRevealSuperAdminPassword(e.target.value)}
-                        placeholder="Super Admin Password"
-                        className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowRevealSuperAdminPassword(!showRevealSuperAdminPassword)}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        {showRevealSuperAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVpnToggleTarget(null);
+                      setVpnAdminPassword('');
+                      setVpnError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingVpn}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {isUpdatingVpn ? 'Updating...' : 'Confirm VPN Policy'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
-                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRevealPasswordUser(null);
-                        setRevealSuperAdminPassword('');
-                        setRevealedPassword('');
-                        setRevealPasswordError('');
-                      }}
-                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isRevealingPassword}
-                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 transition-all cursor-pointer"
-                    >
-                      {isRevealingPassword ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Authenticating...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Key className="w-3.5 h-3.5" />
-                          <span>Reveal Real Password</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 space-y-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400 block">
-                      Decrypted Password
-                    </span>
-                    <div className="flex items-center justify-between gap-2 p-3 bg-slate-950 rounded-xl border border-emerald-700/50">
-                      <span className="font-mono text-base font-bold text-white tracking-wider select-all break-all">
-                        {revealedPassword}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(revealedPassword);
-                          setCopiedPassword(true);
-                          setTimeout(() => setCopiedPassword(false), 2000);
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0"
-                      >
-                        {copiedPassword ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedPassword ? 'Copied!' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  </div>
+        {/* Website Own Popup: Foreign Access (Outside PK) Policy Toggle Modal (Super Admin only) */}
+        {foreignToggleTarget && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-blue-400" />
+                  <h4 className="text-sm font-bold text-white">Foreign Access Policy • باہر رسائی</h4>
+                </div>
+                <button
+                  onClick={() => {
+                    setForeignToggleTarget(null);
+                    setForeignAdminPassword('');
+                    setForeignError('');
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-                  <div className="flex justify-end pt-2 border-t border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRevealPasswordUser(null);
-                        setRevealSuperAdminPassword('');
-                        setRevealedPassword('');
-                        setRevealPasswordError('');
-                      }}
-                      className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
-                    >
-                      Close
-                    </button>
-                  </div>
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5">
+                <p className="text-slate-300">
+                  Target User: <strong className="text-white">{foreignToggleTarget.name}</strong> ({foreignToggleTarget.email})
+                </p>
+                <p className="text-slate-300">
+                  Policy Change: <strong className={foreignToggleTarget.allow_foreign_access ? 'text-amber-400' : 'text-blue-400'}>
+                    {foreignToggleTarget.allow_foreign_access ? 'RESTRICT TO PAKISTAN ONLY (Block Foreign)' : 'ALLOW ACCESS OUTSIDE PAKISTAN'}
+                  </strong>
+                </p>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  {foreignToggleTarget.allow_foreign_access
+                    ? 'When restricted, this user will be blocked if connecting from any IP or location outside Pakistan.'
+                    : 'When allowed, this user can securely sign in and access ALI Garments from international locations outside Pakistan.'}
+                </p>
+              </div>
+
+              {foreignError && (
+                <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span>{foreignError}</span>
                 </div>
               )}
+
+              <form onSubmit={handleConfirmToggleForeign} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Enter Super Admin Password to Authorize
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={foreignAdminPassword}
+                    onChange={(e) => setForeignAdminPassword(e.target.value)}
+                    placeholder="Super Admin Password"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForeignToggleTarget(null);
+                      setForeignAdminPassword('');
+                      setForeignError('');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingForeign}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {isUpdatingForeign ? 'Updating...' : 'Authorize Policy'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

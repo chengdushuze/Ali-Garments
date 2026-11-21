@@ -1,23 +1,16 @@
-import { verifySessionToken, getSessionTokenFromRequest, verifyPassword } from '../_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest, verifyPassword, getSessionSecret, getCorsHeaders } from '../_auth.js';
 
 async function getAdminSession(request, env) {
   const token = getSessionTokenFromRequest(request);
   if (!token) return null;
-  const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+  const secret = getSessionSecret(env);
   return await verifySessionToken(token, secret);
 }
 
 // GET /api/admin/audit - Retrieve user activity and security audit trail
 export async function onRequestGet(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -72,13 +65,23 @@ export async function onRequestGet(context) {
       logs = data?.result?.[0]?.results || [];
     }
 
+    // If regular admin (not super_admin), filter out all Super Admin audit trails
+    const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
+    if (session.role !== 'super_admin') {
+      logs = logs.filter(l => 
+        l.user_email?.toLowerCase() !== SUPER_ADMIN_EMAIL &&
+        !l.details?.toLowerCase().includes('super admin') &&
+        !l.action?.toLowerCase().includes('super_admin')
+      );
+    }
+
     // If empty, supply an initial system status audit entry
     if (logs.length === 0) {
       logs = [
         {
           id: 1,
           user_id: session.userId || 1,
-          user_email: session.email || 'admin@chengdushuze.com',
+          user_email: session.email || 'admin@ali-garments.com',
           action: 'SYSTEM_READY',
           details: 'Audit logging engine active for ALI Garments portal.',
           ip_address: '127.0.0.1',
@@ -103,14 +106,7 @@ export async function onRequestGet(context) {
 // DELETE /api/admin/audit - Remove specific audit trail or purge all records
 export async function onRequestDelete(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAdminSession(request, env);
 
   if (!session) {
@@ -120,10 +116,10 @@ export async function onRequestDelete(context) {
     });
   }
 
-  // Must be admin or super_admin
-  if (session.role !== 'admin' && session.role !== 'super_admin') {
+  // Must be super_admin to delete or purge audit records
+  if (session.role !== 'super_admin') {
     return new Response(
-      JSON.stringify({ success: false, error: 'Access Denied. Admin privileges required.' }),
+      JSON.stringify({ success: false, error: 'Access Denied. Only Super Admin has authority to delete or clear audit records.' }),
       { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -279,13 +275,10 @@ export async function onRequestDelete(context) {
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request);
   return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    },
+    status: 204,
+    headers: corsHeaders,
   });
 }

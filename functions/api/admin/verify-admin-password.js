@@ -1,26 +1,16 @@
-import { verifySessionToken, verifyPassword, getSessionTokenFromRequest } from '../_auth.js';
+import { verifySessionToken, verifyPassword, getSessionTokenFromRequest, getSessionSecret, getCorsHeaders } from '../_auth.js';
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request);
   return new Response(null, {
     status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    },
+    headers: corsHeaders,
   });
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
+  const corsHeaders = getCorsHeaders(request);
 
   const token = getSessionTokenFromRequest(request);
   if (!token) {
@@ -30,7 +20,7 @@ export async function onRequestPost(context) {
     });
   }
 
-  const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+  const secret = getSessionSecret(env);
   const session = await verifySessionToken(token, secret);
 
   if (!session) {

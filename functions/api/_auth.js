@@ -1,6 +1,93 @@
 // Shared Web Crypto Auth Helper for Cloudflare Pages Functions & Node.js
 // Uses native Web Crypto API (crypto.subtle) - 100% Edge & Browser compatible
 
+export function getSessionSecret(env) {
+  if (env && env.SESSION_SECRET && env.SESSION_SECRET.trim()) {
+    return env.SESSION_SECRET.trim();
+  }
+  // Strong default fallback for local dev & production safety
+  return 'ali-garments-production-session-secret-2026-v2-secure';
+}
+
+/**
+ * Strict VPN & Proxy Detection
+ * Cloudflare Edge passes security parameters in request.cf
+ * Checks Tor exit nodes, threat scores, datacenter ASNs, and proxy headers
+ */
+export function isVpnOrProxy(request) {
+  if (!request) return false;
+  
+  // 1. Check Cloudflare CF Object
+  const cf = request.cf || {};
+
+  // Tor network detection
+  if (cf.isTor || cf.country === 'T1' || cf.country === 'A1') {
+    return true;
+  }
+
+  // Threat score (> 15 indicates open proxy, Tor, or malicious bot network)
+  if (typeof cf.threatScore === 'number' && cf.threatScore > 15) {
+    return true;
+  }
+
+  // Corporate Proxy detection
+  if (cf.corporateProxy) {
+    return true;
+  }
+
+  // Datacenter / Cloud Provider ASNs where commercial VPNs operate
+  const org = ((cf.asOrganization || '') + ' ' + (cf.asn || '')).toLowerCase();
+  const vpnDatacenterKeywords = [
+    'digitalocean', 'linode', 'ovh', 'm247', 'hetzner', 'vultr', 'datacamp',
+    'choopa', 'packet', 'leaseweb', 'nordvpn', 'expressvpn', 'surfshark',
+    'cyberghost', 'private internet access', 'proton', 'ipvanish', 'wireguard',
+    'hostinger', 'contabo', 'kamatera', 'scaleway', 'cogent', 'serverius',
+    'purevpn', 'mullvad', 'windscribe', 'hidemyass', 'tunnelbear'
+  ];
+
+  if (vpnDatacenterKeywords.some(keyword => org.includes(keyword))) {
+    return true;
+  }
+
+  // 2. Check Proxy Headers
+  const viaHeader = request.headers.get('via') || '';
+  const proxyHeader = request.headers.get('x-forwarded-proto') || '';
+  const xProxyId = request.headers.get('x-proxy-id') || '';
+  const xForwardedFor = request.headers.get('x-forwarded-for') || '';
+
+  if (viaHeader || xProxyId) {
+    return true;
+  }
+
+  // Multiple chained hops in X-Forwarded-For typically indicate intermediate proxies
+  if (xForwardedFor && xForwardedFor.split(',').length > 3) {
+    return true;
+  }
+
+  return false;
+}
+
+export function getCorsHeaders(request) {
+  const origin = request?.headers?.get('Origin') || '';
+  const isAllowed = !origin ||
+    origin.endsWith('.pages.dev') ||
+    origin === 'https://ali-garments.pages.dev' ||
+    origin === 'capacitor://localhost' ||
+    origin === 'ionic://localhost' ||
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://127.0.0.1');
+
+  const corsOrigin = isAllowed && origin ? origin : 'https://ali-garments.pages.dev';
+
+  return {
+    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
 export function getSessionTokenFromRequest(request) {
   const authHeader = request.headers.get('Authorization') || '';
   if (authHeader.startsWith('Bearer ')) {
@@ -147,5 +234,41 @@ export async function verifySessionToken(token, secret) {
     return payload;
   } catch (e) {
     return null;
+  }
+}
+
+/**
+ * AES-GCM 256-bit Authenticated Encryption for sensitive credentials
+ * Stored as IV_HEX:CIPHERTEXT_HEX (Never cleartext)
+ */
+export async function encryptPassword(plainText, secret) {
+  try {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const keyBytes = await crypto.subtle.digest('SHA-256', enc.encode(secret));
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt']);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plainText));
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const cipherHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${ivHex}:${cipherHex}`;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function decryptPassword(encryptedPayload, secret) {
+  try {
+    if (!encryptedPayload || !encryptedPayload.includes(':')) return encryptedPayload;
+    const [ivHex, cipherHex] = encryptedPayload.split(':');
+    if (!ivHex || !cipherHex || ivHex.length !== 24) return encryptedPayload;
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const ciphertext = new Uint8Array(cipherHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const enc = new TextEncoder();
+    const keyBytes = await crypto.subtle.digest('SHA-256', enc.encode(secret));
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    return encryptedPayload;
   }
 }

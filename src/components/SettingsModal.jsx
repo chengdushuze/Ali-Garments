@@ -21,7 +21,6 @@ import {
   EyeOff,
   KeyRound
 } from 'lucide-react';
-import { executeD1Query, initD1Tables } from '../services/d1Sync';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
 import { apiFetch } from '../services/apiClient';
 
@@ -37,9 +36,8 @@ export default function SettingsModal({
   onSaveAppLockConfig,
   onTriggerAppLock
 }) {
-  const [activeTab, setActiveTab] = useState('d1'); // 'd1', 'company', 'payments', 'backup', 'app_lock'
+  const [activeTab, setActiveTab] = useState('company'); // 'company', 'payments', 'backup', 'app_lock'
   const [formData, setFormData] = useState({ ...settings });
-  const [testStatus, setTestStatus] = useState(null); // { loading, success, message }
 
   // App Lock Form State
   const [newPin, setNewPin] = useState('');
@@ -193,43 +191,33 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 my-8 overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-black/75 backdrop-blur-sm overflow-hidden animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 md:rounded-3xl max-w-2xl w-full h-full md:h-auto md:max-h-[90vh] shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+        {/* Header (Clean, Mobile App-Friendly with Back/Close) */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/40 shrink-0">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              App Settings & Cloudflare D1
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Building className="w-5 h-5 text-emerald-600" />
+              <span>App Settings • ترتیبات</span>
             </h3>
             <p className="text-xs text-slate-500">
-              Configure Cloudflare D1 Database, Invoicing, Logo & Payments
+              Customize Company Profile, Invoicing, Payments & App Lock
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Close Settings"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 bg-slate-50/50 dark:bg-slate-950/30 overflow-x-auto text-xs font-medium">
-          <button
-            onClick={() => setActiveTab('d1')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'd1'
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Database className="w-4 h-4" />
-            <span>Cloudflare D1 Database</span>
-          </button>
-
+        {/* Tab Navigation (Clean pills, no raw DB credentials shown in app) */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 bg-slate-50/50 dark:bg-slate-950/30 overflow-x-auto text-xs font-medium shrink-0">
           <button
             onClick={() => setActiveTab('company')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'company'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -241,7 +229,7 @@ export default function SettingsModal({
 
           <button
             onClick={() => setActiveTab('payments')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'payments'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -253,7 +241,7 @@ export default function SettingsModal({
 
           <button
             onClick={() => setActiveTab('backup')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'backup'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -272,7 +260,7 @@ export default function SettingsModal({
               setConfirmPin('');
               setCurrentPinCheck('');
             }}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'app_lock'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -283,125 +271,9 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* Tab Body */}
-        <div className="p-4 sm:p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-          {/* TAB 1: CLOUDFLARE D1 */}
-          {activeTab === 'd1' && (
-            <div className="space-y-4 text-xs">
-              {/* Architecture Info Box */}
-              <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 space-y-1.5">
-                <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200 font-bold">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Ultra Quota-Saving Single-Row Engine Active</span>
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
-                  Each customer uses exactly <strong>1 single row</strong> in Cloudflare D1 for all their transactions until hitting the ~1.8MB limit! This preserves 99% of your D1 daily read/write free limits.
-                </p>
-                <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
-                  <strong>Zero-Wait Cache:</strong> Data is read instantly from local IndexedDB cache memory. If the D1 daily limit is reached, your app never stops working: data stays safely in cache and syncs when limits reset.
-                </p>
-              </div>
-
-              {/* Required Keys Box */}
-              <div className="space-y-3">
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                  Required Cloudflare D1 Keys
-                </h4>
-
-                {/* 1. Account ID */}
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    1. Cloudflare Account ID *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 7f3b890a12c45d67890ef1234567890a"
-                    value={formData.d1AccountId}
-                    onChange={e => handleChange('d1AccountId', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Found in Cloudflare Dashboard URL or right sidebar of your Account overview.
-                  </p>
-                </div>
-
-                {/* 2. D1 Database ID */}
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    2. D1 Database ID *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                    value={formData.d1DatabaseId}
-                    onChange={e => handleChange('d1DatabaseId', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Found in Workers & Pages &rarr; D1 &rarr; Select Database &rarr; Database ID.
-                  </p>
-                </div>
-
-                {/* 3. API Token */}
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    3. Cloudflare API Token (with D1 Edit Permissions) *
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Cloudflare API Token with D1:Edit permission"
-                    value={formData.d1ApiToken}
-                    onChange={e => handleChange('d1ApiToken', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Create in Cloudflare Profile &rarr; API Tokens &rarr; Create Token &rarr; D1 Edit permission.
-                  </p>
-                </div>
-
-                {/* Test Connection Button */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleTestD1Connection}
-                    disabled={testStatus?.loading}
-                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors"
-                  >
-                    {testStatus?.loading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin text-emerald-500" />
-                        <span>Testing Connection & Initializing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-4 h-4 text-emerald-500" />
-                        <span>Test Connection & Verify Tables</span>
-                      </>
-                    )}
-                  </button>
-
-                  {testStatus && (
-                    <div
-                      className={`mt-2 p-2.5 rounded-xl flex items-center gap-2 ${
-                        testStatus.success
-                          ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                          : 'bg-rose-50 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                      }`}
-                    >
-                      {testStatus.success ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                      )}
-                      <span>{testStatus.message}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: COMPANY & LOGO */}
+        {/* Tab Body (Full scrolling on mobile, padded for bottom button) */}
+        <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto pb-24 md:pb-6">
+          {/* TAB 1: COMPANY & LOGO */}
           {activeTab === 'company' && (
             <div className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

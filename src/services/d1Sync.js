@@ -1,4 +1,5 @@
 import { getSettings, getSyncQueue, clearSyncQueue, addToSyncQueue } from './storage';
+import { apiFetch, getStoredToken } from './apiClient';
 
 const MAX_CHUNK_BYTES = 1800000; // ~1.8 MB safety threshold for 2MB SQLite limit
 
@@ -25,11 +26,15 @@ export async function executeD1Query(sql, params = [], customSettings = null) {
   try {
     // 1. Try Cloudflare Pages /api/d1 endpoint (Native env.DB binding)
     const headers = { 'Content-Type': 'application/json' };
+    const authToken = getStoredToken();
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     if (accountId) headers['x-cf-account-id'] = accountId;
     if (databaseId) headers['x-cf-database-id'] = databaseId;
     if (apiToken) headers['x-cf-api-token'] = apiToken;
 
-    let response = await fetch(endpoint, {
+    let response = await apiFetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({ sql, params })

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Phone, MapPin, ChevronRight, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Search, UserPlus, Phone, MapPin, ChevronRight, X, ArrowDownLeft, ArrowUpRight, Edit3 } from 'lucide-react';
 
 export default function CustomerList({
   customers,
   onSelectCustomer,
   selectedCustomerId,
   onOpenNewCustomer,
+  onOpenEditCustomer,
   currency = 'Rs.',
   filterTabProp = null
 }) {
@@ -241,6 +242,19 @@ export default function CustomerList({
                       {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Settled (Nil)'}
                     </span>
                   </div>
+                  {onOpenEditCustomer && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenEditCustomer(customer);
+                      }}
+                      className="p-1 rounded-lg text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="Edit Party Details"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                 </div>
               </div>

@@ -10,6 +10,7 @@ import CustomerList from './components/CustomerList';
 import CustomerDetail from './components/CustomerDetail';
 import TransactionModal from './components/TransactionModal';
 import AddCustomerModal from './components/AddCustomerModal';
+import EditCustomerModal from './components/EditCustomerModal';
 import InvoiceBuilder from './components/InvoiceBuilder';
 import SettingsModal from './components/SettingsModal';
 import DeleteConsentModal from './components/DeleteConsentModal';
@@ -19,7 +20,7 @@ import MobileHeader from './components/MobileHeader';
 import MobileHeroCard from './components/MobileHeroCard';
 import MobileMenuDrawer from './components/MobileMenuDrawer';
 import AppLockScreen from './components/AppLockScreen';
-import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 import {
   getSettings,
@@ -153,16 +154,91 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Real-time Active Session Watcher: Kicks out suspended users immediately & syncs role changes
+  // Account Revocation & Security Notice Modal State
+  const [accountNoticeModal, setAccountNoticeModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'suspended',
+    actionText: 'OK, Proceed to Login'
+  });
+
+  const triggerAccountNotice = useCallback(async (data) => {
+    let title = 'Security Notice • سیکیورٹی الرٹ';
+    let message = data.error || 'Your session has ended.';
+    let type = 'general';
+
+    if (data.isSuspended) {
+      title = 'Account Suspended • کھاتہ معطل کر دیا گیا ہے';
+      const daysText = data.suspendedDays ? ` for ${data.suspendedDays} day(s)` : '';
+      message = data.error || `Your account has been temporarily suspended by an administrator${daysText}. Access is restricted.`;
+      type = 'suspended';
+    } else if (data.isDeleted) {
+      title = 'Account Removed • اکاؤنٹ ختم کر دیا گیا ہے';
+      message = 'Your user account has been removed by an administrator. Please contact management.';
+      type = 'deleted';
+    } else if (data.isVpnBlocked) {
+      title = 'VPN / Proxy Detected • وی پی این یا پراکسی بلاک ہے';
+      message = 'VPN or Proxy connection detected. Security policy blocks VPN/Proxy access until authorized by Administrator in the Admin Panel. Please disable your VPN or contact your administrator.';
+      type = 'vpn';
+    } else if (data.isGeoBlocked || data.code === 'GEO_BLOCKED') {
+      title = 'Access Restricted to Pakistan • صرف پاکستان کیلئے محدود';
+      message = data.error || 'Access to ALI Garments is restricted to users located within Pakistan. If you require access from outside Pakistan, please contact the Super Admin to enable foreign access for your account.';
+      type = 'geo';
+    } else if (data.isLoggedOut) {
+      title = 'Session Terminated • سیشن ختم کر دیا گیا ہے';
+      message = 'Your active session has been revoked by an administrative action. Please sign in again.';
+      type = 'revoked';
+    }
+
+    setAccountNoticeModal({
+      isOpen: true,
+      title,
+      message,
+      type,
+      actionText: 'OK, Proceed to Login'
+    });
+
+    // Clear stored session tokens immediately
+    clearStoredToken();
+    await clearCachedAuthUser();
+  }, []);
+
+  const handleDismissAccountNotice = () => {
+    setAccountNoticeModal(prev => ({ ...prev, isOpen: false }));
+    setCurrentUser(null);
+    setSelectedCustomer(null);
+  };
+
+  // Global Revocation Event Listener (Reacts immediately across Android APK & Web)
+  useEffect(() => {
+    const handleRevocation = (e) => {
+      if (e.detail) {
+        triggerAccountNotice(e.detail);
+      }
+    };
+
+    window.addEventListener('ag_account_revocation', handleRevocation);
+    return () => window.removeEventListener('ag_account_revocation', handleRevocation);
+  }, [triggerAccountNotice]);
+
+  // Real-time Active Session Watcher (Throttled & Focus-Driven to save 90% Worker Requests/Credits)
   useEffect(() => {
     if (!currentUser || currentUser.role === 'super_admin') return;
 
-    const interval = setInterval(async () => {
+    let lastCheckTime = 0;
+    const checkSession = async () => {
+      const now = Date.now();
+      if (now - lastCheckTime < 45000) return; // Throttle to at most once per 45s
+      lastCheckTime = now;
+
       try {
         const res = await apiFetch('/api/me');
         const data = await res.json().catch(() => ({}));
-        if (res.status === 403 || data.isSuspended) {
-          await handleLogout();
+        if (res.status === 403 || data.isSuspended || data.isVpnBlocked) {
+          triggerAccountNotice(data);
+        } else if (res.status === 401 || data.isDeleted || data.isLoggedOut) {
+          triggerAccountNotice(data);
         } else if (res.ok && data.user) {
           if (data.user.role !== currentUser.role) {
             setCurrentUser(data.user);
@@ -170,10 +246,21 @@ export default function App() {
           }
         }
       } catch (e) {}
-    }, 10000);
+    };
 
-    return () => clearInterval(interval);
-  }, [currentUser]);
+    const interval = setInterval(checkSession, 90000); // 90-second heartbeat saves serverless worker quota
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkSession();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [currentUser, triggerAccountNotice]);
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutSyncStatus, setLogoutSyncStatus] = useState('');
@@ -249,6 +336,8 @@ export default function App() {
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [txModalType, setTxModalType] = useState('give');
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
@@ -292,15 +381,15 @@ export default function App() {
       let loadedCustomers = await getCustomers();
       const txMap = {};
 
-      // Seed all 132 customer ledgers if empty or demo data
-      if (!loadedCustomers || loadedCustomers.length < 10) {
+      // Seed clean demo template only if storage is completely empty
+      if (!loadedCustomers || loadedCustomers.length === 0) {
         const { default: seedCustomers } = await import('./data/seedData.json');
         if (seedCustomers && seedCustomers.length > 0) {
           loadedCustomers = seedCustomers.map(c => ({
             id: c.id,
             name: c.name,
-            phone: c.phone || '0335-4311792',
-            address: c.address || 'Cloth Market, Faisalabad',
+            phone: c.phone || '',
+            address: c.address || '',
             category: c.category || 'wholesale',
             balance: c.balance || 0,
             totalTransactions: c.totalTransactions || c.transactions?.length || 0,
@@ -322,18 +411,15 @@ export default function App() {
 
       setCustomers(loadedCustomers);
       setTransactionsMap(txMap);
-      if (loadedCustomers.length > 0) {
-        setSelectedCustomer(loadedCustomers[0]);
-      }
+      // Always start on Main / Home screen (do not default to 4 Season G9 or any single customer on launch)
+      setSelectedCustomer(null);
 
       // Load Recycle Bin (auto-purges expired >30 days)
       let initialBin = await getRecycleBin();
       setRecycleBinItems(initialBin);
 
-      // Check D1 setup
-      const isD1Configured = Boolean(
-        savedSettings.d1AccountId && savedSettings.d1DatabaseId && savedSettings.d1ApiToken
-      );
+      // Cloudflare D1 Native Sync is automatically connected via Cloudflare Pages proxy (/api/d1)
+      const isD1Configured = true;
 
       // Pull latest Recycle Bin items from D1 across devices
       if (isD1Configured) {
@@ -517,6 +603,25 @@ export default function App() {
       if (res && res.isQuotaExceeded) {
         setSyncState(prev => ({ ...prev, isQuotaExceeded: true, pendingCount: prev.pendingCount + 1 }));
       }
+    });
+  };
+
+  // Update Customer Details
+  const handleUpdateCustomer = async (updatedCust) => {
+    const updatedCustomers = customers.map(c => c.id === updatedCust.id ? updatedCust : c);
+    setCustomers(updatedCustomers);
+    if (selectedCustomer && selectedCustomer.id === updatedCust.id) {
+      setSelectedCustomer(updatedCust);
+    }
+
+    await saveCustomers(updatedCustomers);
+    const custTxs = transactionsMap[updatedCust.id] || [];
+    syncCustomerToD1(updatedCust, custTxs).then(res => {
+      if (res && res.isQuotaExceeded) {
+        setSyncState(prev => ({ ...prev, isQuotaExceeded: true, pendingCount: prev.pendingCount + 1 }));
+      }
+    }).catch(err => {
+      console.warn('Background sync customer update failed:', err);
     });
   };
 
@@ -893,13 +998,17 @@ export default function App() {
               onSelectCustomer={cust => setSelectedCustomer(cust)}
               selectedCustomerId={selectedCustomer?.id}
               onOpenNewCustomer={() => setIsNewCustomerOpen(true)}
+              onOpenEditCustomer={(cust) => {
+                setEditingCustomer(cust);
+                setIsEditCustomerOpen(true);
+              }}
               currency={settings.currency || 'Rs.'}
               filterTabProp={mobilePartyFilter}
             />
           </div>
 
           {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg) */}
-          <div className={`lg:col-span-7 h-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
+          <div className={`lg:col-span-7 flex flex-col min-h-[calc(100vh-200px)] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
             {selectedCustomer ? (
               <CustomerDetail
                 customer={selectedCustomer}
@@ -913,6 +1022,10 @@ export default function App() {
                 onOpenInvoiceForCustomer={handleOpenInvoiceForCustomer}
                 onRequestDeleteTransaction={handleRequestDeleteTransaction}
                 onRequestDeleteCustomer={handleRequestDeleteCustomer}
+                onOpenEditCustomer={(cust) => {
+                  setEditingCustomer(cust);
+                  setIsEditCustomerOpen(true);
+                }}
                 settings={settings}
                 currency={settings.currency || 'Rs.'}
               />
@@ -957,6 +1070,17 @@ export default function App() {
         onClose={() => setIsNewCustomerOpen(false)}
         onSave={handleAddCustomer}
         currency={settings.currency || 'Rs.'}
+      />
+
+      {/* 2b. Edit Customer Modal */}
+      <EditCustomerModal
+        isOpen={isEditCustomerOpen}
+        onClose={() => {
+          setIsEditCustomerOpen(false);
+          setEditingCustomer(null);
+        }}
+        customer={editingCustomer || selectedCustomer}
+        onSave={handleUpdateCustomer}
       />
 
       {/* 3. Invoice Builder Modal */}
@@ -1164,7 +1288,45 @@ export default function App() {
         </div>
       )}
 
-      {/* 10. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
+      {/* 10. Account Notice Modal (Suspension, Deletion, VPN Block, Session Invalidation) */}
+      {accountNoticeModal.isOpen && (
+        <div className="fixed inset-0 z-[99] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center shadow-lg ${
+              accountNoticeModal.type === 'vpn' || accountNoticeModal.type === 'geo'
+                ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                : 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
+            }`}>
+              {accountNoticeModal.type === 'vpn' || accountNoticeModal.type === 'geo' ? (
+                <Globe className="w-7 h-7" />
+              ) : (
+                <AlertTriangle className="w-7 h-7" />
+              )}
+            </div>
+
+            <div>
+              <h4 className="font-bold text-white text-base">
+                {accountNoticeModal.title}
+              </h4>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                {accountNoticeModal.message}
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleDismissAccountNotice}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
+              >
+                {accountNoticeModal.actionText || 'OK, Proceed to Login'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
       <AppLockScreen
         isLocked={isAppLocked}
         onUnlock={() => {

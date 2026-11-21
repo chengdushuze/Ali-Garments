@@ -1,24 +1,22 @@
-import { verifySessionToken } from './_auth.js';
+import { verifySessionToken, getSessionTokenFromRequest, getSessionSecret, getCorsHeaders } from './_auth.js';
 
 async function getAuthSession(request, env) {
-  const cookieHeader = request.headers.get('Cookie') || '';
-  const match = cookieHeader.match(/session=([^;]+)/);
-  const token = match ? match[1] : null;
-
+  const token = getSessionTokenFromRequest(request);
   if (!token) return null;
-  const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+  const secret = getSessionSecret(env);
   return await verifySessionToken(token, secret);
 }
 
 // GET /api/data - Get items owned strictly by the authenticated user
 export async function onRequestGet(context) {
   const { request, env } = context;
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAuthSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -35,13 +33,13 @@ export async function onRequestGet(context) {
     }
     return new Response(JSON.stringify({ items }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Data GET error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
@@ -49,12 +47,13 @@ export async function onRequestGet(context) {
 // POST /api/data - Create item owned by the authenticated user
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAuthSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -63,7 +62,7 @@ export async function onRequestPost(context) {
     if (!content || !content.trim()) {
       return new Response(JSON.stringify({ error: 'Content is required.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -86,20 +85,20 @@ export async function onRequestPost(context) {
         }),
         {
           status: 201,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Data POST error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 }
@@ -107,12 +106,13 @@ export async function onRequestPost(context) {
 // DELETE /api/data - Delete item owned by authenticated user
 export async function onRequestDelete(context) {
   const { request, env } = context;
+  const corsHeaders = getCorsHeaders(request);
   const session = await getAuthSession(request, env);
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -123,7 +123,7 @@ export async function onRequestDelete(context) {
     if (!id) {
       return new Response(JSON.stringify({ error: 'Item ID is required.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -136,13 +136,21 @@ export async function onRequestDelete(context) {
 
     return new Response(JSON.stringify({ success: true, message: 'Item deleted' }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Data DELETE error:', error);
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+}
+
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request);
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
 }

@@ -1,92 +1,20 @@
-import { verifyPassword, signSessionToken, hashPassword } from './_auth.js';
+import { verifyPassword, signSessionToken, getSessionSecret, getCorsHeaders, isVpnOrProxy } from './_auth.js';
 
 const RATE_LIMIT_MAX_ATTEMPTS = 3;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
-
 const SUPER_ADMIN_EMAIL = 'admin@chengdushuze.com';
-const SUPER_ADMIN_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
 
-export async function ensureSuperAdminInD1(db, env = null) {
-  if (db) {
-    try {
-      // 1. Create users table if not exists with all required columns
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          email TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'user',
-          status TEXT DEFAULT 'active',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
-
-      // 2. Ensure status column exists in existing tables
-      try {
-        await db.prepare("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'").run();
-      } catch (e) {}
-
-      // 3. Check if Super Admin exists in users table
-      const existing = await db.prepare('SELECT id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = ?')
-        .bind(SUPER_ADMIN_EMAIL)
-        .first();
-
-      if (!existing) {
-        await db.prepare(
-          'INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?)'
-        ).bind('Super Admin', SUPER_ADMIN_EMAIL, SUPER_ADMIN_HASH, 'super_admin', 'active').run();
-        console.log('[D1] Successfully inserted Super Admin into users table:', SUPER_ADMIN_EMAIL);
-      } else if (existing.role !== 'super_admin' || existing.status !== 'active' || existing.password_hash !== SUPER_ADMIN_HASH) {
-        await db.prepare(
-          'UPDATE users SET role = ?, status = ?, password_hash = ? WHERE LOWER(email) = ?'
-        ).bind('super_admin', 'active', SUPER_ADMIN_HASH, SUPER_ADMIN_EMAIL).run();
-        console.log('[D1] Successfully refreshed Super Admin role and password in users table:', SUPER_ADMIN_EMAIL);
-      }
-    } catch (err) {
-      console.error('[D1 Error] Failed to ensure Super Admin in D1 via binding:', err);
-    }
-  }
-
-  // Fallback direct REST query if env Cloudflare credentials exist
-  if (env && env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
-    try {
-      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
-      await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.CF_API_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sql: `
-            CREATE TABLE IF NOT EXISTS users (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT NOT NULL,
-              email TEXT NOT NULL UNIQUE,
-              password_hash TEXT NOT NULL,
-              role TEXT NOT NULL DEFAULT 'user',
-              status TEXT DEFAULT 'active',
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            INSERT OR IGNORE INTO users (name, email, password_hash, role, status) VALUES ('Super Admin', '${SUPER_ADMIN_EMAIL}', '${SUPER_ADMIN_HASH}', 'super_admin', 'active');
-            UPDATE users SET role = 'super_admin', status = 'active', password_hash = '${SUPER_ADMIN_HASH}' WHERE LOWER(email) = '${SUPER_ADMIN_EMAIL}';
-          `
-        }),
-      });
-    } catch (restErr) {
-      console.error('[D1 REST Error]', restErr);
-    }
-  }
-}
-
-// GET /api/login - Proactively seeds Super Admin into D1 and returns health status
+// GET /api/login - Prohibit auto-seeding over public HTTP; return 405 Method Not Allowed
 export async function onRequestGet(context) {
-  const { env } = context;
-  await ensureSuperAdminInD1(env.DB, env);
-  return new Response(JSON.stringify({ ok: true, message: 'Super admin ensured in D1 database', email: SUPER_ADMIN_EMAIL }), {
+  const { request } = context;
+  const corsHeaders = getCorsHeaders(request);
+  return new Response(JSON.stringify({ 
+    error: 'Method Not Allowed. Super admin seeding is restricted to CLI scripts (scripts/seed-super-admin.js).' 
+  }), {
+    status: 405,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      ...corsHeaders,
+      'Allow': 'POST, OPTIONS',
       'Content-Type': 'application/json',
     },
   });
@@ -94,16 +22,15 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const corsHeaders = getCorsHeaders(request);
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-
-  // 1. Proactively ensure users table and Super Admin are saved in D1 immediately!
-  await ensureSuperAdminInD1(env.DB, env);
+  // Ensure database columns exist safely
+  if (env.DB) {
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1').run(); } catch (e) {}
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_vpn INTEGER DEFAULT 0').run(); } catch (e) {}
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN allow_foreign_access INTEGER DEFAULT 0').run(); } catch (e) {}
+    try { await env.DB.prepare('ALTER TABLE users ADD COLUMN suspended_until INTEGER').run(); } catch (e) {}
+  }
 
   try {
     const { email, password } = await request.json().catch(() => ({}));
@@ -179,7 +106,13 @@ export async function onRequestPost(context) {
     // 2. Query user from Cloudflare D1
     let user = null;
     if (env.DB) {
-      user = await env.DB.prepare('SELECT id, name, email, password_hash, role, status, suspended_until FROM users WHERE LOWER(email) = ?')
+      user = await env.DB.prepare(
+        `SELECT id, name, email, password_hash, role, status, suspended_until, 
+                COALESCE(token_version, 1) as token_version, 
+                COALESCE(allow_vpn, 0) as allow_vpn,
+                COALESCE(allow_foreign_access, 0) as allow_foreign_access 
+         FROM users WHERE LOWER(email) = ?`
+      )
         .bind(cleanEmail)
         .first();
     } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
@@ -191,12 +124,81 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sql: 'SELECT id, name, email, password_hash, role, status, suspended_until FROM users WHERE LOWER(email) = ? LIMIT 1',
+          sql: `SELECT id, name, email, password_hash, role, status, suspended_until, 
+                       COALESCE(token_version, 1) as token_version, 
+                       COALESCE(allow_vpn, 0) as allow_vpn,
+                       COALESCE(allow_foreign_access, 0) as allow_foreign_access 
+                FROM users WHERE LOWER(email) = ? LIMIT 1`,
           params: [cleanEmail],
         }),
       });
       const data = await res.json();
       user = data?.result?.[0]?.results?.[0] || null;
+    }
+
+    // Check Pakistan-only Geo Restriction
+    const clientCountry = request.cf?.country; // Undefined in local dev / native requests
+    if (clientCountry && clientCountry !== 'PK') {
+      const hasForeignAccess = user && Number(user.allow_foreign_access) === 1;
+      if (!hasForeignAccess) {
+        if (env.DB) {
+          try {
+            await env.DB.prepare(
+              'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+            ).bind(
+              user?.id || null,
+              cleanEmail,
+              'GEO_BLOCKED',
+              `Login blocked: Access from country '${clientCountry}' denied (User lacks foreign access permission).`,
+              clientIp
+            ).run();
+          } catch (e) {}
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: `Access restricted to Pakistan (PK). Your detected location is ${clientCountry}. Please contact Super Admin for foreign access authorization.`,
+            code: 'GEO_BLOCKED',
+            isGeoBlocked: true,
+            country: clientCountry
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
+    // Check Strict VPN / Proxy Policy
+    if (isVpnOrProxy(request)) {
+      if (!user || user.allow_vpn !== 1) {
+        if (env.DB) {
+          try {
+            await env.DB.prepare(
+              'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
+            ).bind(
+              user?.id || null,
+              cleanEmail,
+              'VPN_BLOCKED',
+              `Login blocked: Access via VPN or proxy denied without admin authorization.`,
+              clientIp
+            ).run();
+          } catch (e) {}
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: 'VPN or Proxy connection detected. Security policy requires Administrator authorization to access ALI Garments through a VPN or Proxy. Please disable your VPN or contact your administrator.',
+            code: 'VPN_BLOCKED',
+            isVpnBlocked: true
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
     }
 
     // Check if user is suspended (Super Admin is NEVER suspended)
@@ -214,6 +216,8 @@ export async function onRequestPost(context) {
           JSON.stringify({
             error: `Your account has been temporarily suspended by an administrator${untilMsg}. Please contact management.`,
             isSuspended: true,
+            suspendedDays: remainingDays,
+            suspendedUntil: user.suspended_until,
           }),
           {
             status: 403,
@@ -251,7 +255,6 @@ export async function onRequestPost(context) {
       // 500ms security delay on failed logins to prevent brute-force timing attacks
       await new Promise(r => setTimeout(r, 500));
 
-      // Do NOT reveal remaining attempt count to attacker before the 15-minute lock
       const message = remaining === 0
         ? 'Too many failed login attempts (3 maximum). For your security, login is locked for 15 minutes.'
         : 'Invalid email or password.';
@@ -308,23 +311,12 @@ export async function onRequestPost(context) {
 
         await env.DB.prepare(
           'INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)'
-        ).bind(user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in from ${deviceType} (IP: ${clientIp})`, clientIp).run().catch(() => {});
+        ).bind(user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in from ${deviceType} (IP: ${clientIp}${clientCountry ? ', Country: ' + clientCountry : ''})`, clientIp).run().catch(() => {});
       } catch (e) {}
-    } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
-      // Direct REST API fallback
-      const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
-      await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sql: "INSERT INTO audit_logs (user_id, user_email, action, details, ip_address) VALUES (?, ?, ?, ?, ?)",
-          params: [user.id, user.email, 'USER_LOGIN', `User ${user.name} signed in from ${deviceType} (IP: ${clientIp})`, clientIp],
-        }),
-      }).catch(() => {});
     }
 
     // 5. Sign session token with SESSION_SECRET (Strict 5-Day Expiration for Security)
-    const secret = env.SESSION_SECRET || 'ali-garments-production-session-secret-2026';
+    const secret = getSessionSecret(env);
     const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
     const FIVE_DAYS_SECONDS = 5 * 24 * 60 * 60; // 432,000 seconds
 
@@ -333,6 +325,9 @@ export async function onRequestPost(context) {
       email: user.email,
       name: user.name,
       role: user.role || 'user',
+      allow_vpn: user.allow_vpn || 0,
+      allow_foreign_access: user.allow_foreign_access || 0,
+      ver: user.token_version || 1,
       exp: Date.now() + FIVE_DAYS_MS,
     };
 
@@ -350,6 +345,8 @@ export async function onRequestPost(context) {
           name: user.name,
           email: user.email,
           role: user.role || 'user',
+          allow_vpn: user.allow_vpn || 0,
+          allow_foreign_access: user.allow_foreign_access || 0,
           is_super_admin: user.role === 'super_admin' || user.email === SUPER_ADMIN_EMAIL,
         },
       }),
@@ -371,13 +368,10 @@ export async function onRequestPost(context) {
   }
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request);
   return new Response(null, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    },
+    status: 204,
+    headers: corsHeaders,
   });
 }

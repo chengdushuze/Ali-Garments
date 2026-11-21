@@ -14,7 +14,8 @@ import {
   Trash2,
   CheckCircle2,
   Share2,
-  Plus
+  Plus,
+  Edit3
 } from 'lucide-react';
 import { downloadCustomerExcel } from '../services/excelService';
 
@@ -27,6 +28,7 @@ export default function CustomerDetail({
   onDeleteTransaction,
   onRequestDeleteTransaction,
   onRequestDeleteCustomer,
+  onOpenEditCustomer,
   settings,
   currency = 'Rs.'
 }) {
@@ -136,6 +138,16 @@ export default function CustomerDetail({
                 <span className="text-[10px] px-2 py-0.5 rounded-md font-semibold uppercase tracking-wider bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
                   {customer.category || 'Customer'}
                 </span>
+                {onOpenEditCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenEditCustomer(customer)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+                    title="Edit Party Details • کھاتہ تفصیل تبدیل کریں"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {customer.phone && (
@@ -178,7 +190,20 @@ export default function CustomerDetail({
         </div>
 
         {/* Action Buttons Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-800/80">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-800/80">
+          {/* Edit Party Details */}
+          {onOpenEditCustomer && (
+            <button
+              type="button"
+              onClick={() => onOpenEditCustomer(customer)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-xs"
+              title="Edit Customer Details (نام اور تفصیل تبدیل کریں)"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="whitespace-nowrap">Edit Details</span>
+            </button>
+          )}
+
           {/* WhatsApp Reminder */}
           <button
             onClick={handleSendWhatsAppReminder}
@@ -266,7 +291,7 @@ export default function CustomerDetail({
       </div>
 
       {/* Transaction Feed */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 max-h-[500px]">
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
         {filteredTxs.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -387,11 +412,11 @@ export default function CustomerDetail({
       </div>
 
       {/* Sticky Bottom Actions: You Gave (Debit) vs You Got (Credit) */}
-      <div className="p-3 sm:p-4 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md grid grid-cols-2 gap-2.5 sm:gap-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+      <div className="sticky bottom-[72px] md:bottom-0 z-30 p-2.5 sm:p-4 border-t border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md grid grid-cols-2 gap-2 sm:gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]">
         {/* You Gave (Debit / Maal Diya) */}
         <button
           onClick={() => onOpenAddTransaction(customer, 'give')}
-          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white shadow-lg shadow-rose-600/25 transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white shadow-lg shadow-rose-600/25 transition-all whitespace-nowrap cursor-pointer"
         >
           <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span className="whitespace-nowrap">You Gave (ادھار دیا)</span>
@@ -400,7 +425,7 @@ export default function CustomerDetail({
         {/* You Got (Credit / Paisa Mila) */}
         <button
           onClick={() => onOpenAddTransaction(customer, 'get')}
-          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-lg shadow-emerald-600/25 transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-lg shadow-emerald-600/25 transition-all whitespace-nowrap cursor-pointer"
         >
           <ArrowDownLeft className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span className="whitespace-nowrap">You Got (وصولی ملی)</span>
