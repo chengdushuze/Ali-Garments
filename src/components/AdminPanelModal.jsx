@@ -547,7 +547,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
     if (!suspendingUser) return;
     if (!suspendAdminPassword) {
-      setSuspendError('You must enter your current admin password to verify consent.');
+      setSuspendError('You must enter your current admin password to verify consent');
       return;
     }
 
@@ -562,7 +562,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
           id: suspendingUser.id,
           status: targetStatus,
           durationDays: targetStatus === 'suspended' ? Number(suspendDurationDays) : null,
-          suspensionReason: targetStatus === 'suspended' ? (suspendReason.trim() || 'We suspected unusual activity on your account.') : null,
+          suspensionReason: targetStatus === 'suspended' ? (suspendReason.trim() || 'We suspected unusual activity on your account') : null,
           adminPassword: suspendAdminPassword,
         }),
       });
@@ -570,7 +570,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        setSuspendError(data.error || 'Failed to update user status.');
+        const errorText = (data.error || 'Failed to update user status').replace(/\./g, '');
+        setSuspendError(errorText);
         setIsTogglingSuspend(false);
         return;
       }
@@ -578,17 +579,18 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       setStatusMessage({
         type: 'success',
         text: targetStatus === 'suspended'
-          ? `User "${suspendingUser.name}" (${suspendingUser.email}) has been temporarily suspended.`
+          ? `User "${suspendingUser.name}" (${suspendingUser.email}) has been temporarily suspended`
           : `User "${suspendingUser.name}" (${suspendingUser.email}) has been successfully reactivated!`,
       });
 
       setSuspendingUser(null);
       setSuspendAdminPassword('');
-      setSuspendReason('We suspected unusual activity on your account.');
+      setSuspendReason('We suspected unusual activity on your account');
       fetchUsers();
     } catch (err) {
       console.error('Toggle suspend error:', err);
-      setSuspendError('Failed to connect to server. Please try again.');
+      const networkErr = (err?.message || 'Connection failed').replace(/\./g, '');
+      setSuspendError(`Network error: ${networkErr} Please try again`);
     } finally {
       setIsTogglingSuspend(false);
     }
@@ -1296,6 +1298,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                   <div className="text-xs text-slate-400 font-mono mt-1 truncate">
                                     {u.email}
                                   </div>
+                                  {u.status === 'suspended' && (
+                                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-rose-300 bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-800/60 max-w-fit">
+                                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                      <span className="font-semibold text-rose-200">Suspended After Login:</span>
+                                      <span className="font-mono text-rose-300">{u.suspension_reason || 'Account automatically suspended due to unusual failed password attempts'}</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
@@ -2073,9 +2082,31 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
               </div>
 
               {suspendError && (
-                <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-start gap-2">
+                <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-start gap-2 shadow-lg">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span>{suspendError}</span>
+                  <span className="font-medium leading-tight">{(suspendError || '').replace(/\./g, '')}</span>
+                </div>
+              )}
+
+              {/* Show the real problem why the problem was after login screen */}
+              {suspendingUser.status === 'suspended' && (
+                <div className="p-3.5 rounded-xl bg-amber-950/60 border border-amber-700/80 text-amber-200 text-xs space-y-2 shadow-md animate-in fade-in">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300 uppercase tracking-wider text-[11px]">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Real Problem After Login Screen:</span>
+                  </div>
+                  <div className="bg-slate-950/80 p-2.5 rounded-lg border border-amber-800/60 space-y-1">
+                    <p className="font-semibold text-rose-300 text-xs flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                      <span>{suspendingUser.suspension_reason || 'Account automatically suspended due to unusual failed password attempts'}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Trigger: 6 incorrect password attempts entered on login screen
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-amber-300/90 leading-tight">
+                    Confirming reactivation below will immediately clear all failed password attempts from D1 and restore full access to this administrator.
+                  </p>
                 </div>
               )}
 
