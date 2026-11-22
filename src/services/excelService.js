@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
-import { saveFileToDevice } from './fileSaver';
+import { saveFileToDevice } from './fileSaver.js';
 
 /**
  * Universal safe Excel file saver
@@ -62,6 +62,28 @@ function formatTime(d) {
 }
 
 /**
+ * Generates a valid, unique Excel worksheet name (max 31 characters, no invalid symbols : \ / ? * [ ])
+ */
+function getUniqueSheetName(rawName, usedSet, fallbackIndex = 1) {
+  let clean = (rawName || `Party_${fallbackIndex}`)
+    .replace(/[:\\/?*\[\]]/g, '')
+    .trim();
+  if (!clean) clean = `Party_${fallbackIndex}`;
+  clean = clean.slice(0, 31);
+
+  let candidate = clean;
+  let counter = 2;
+  while (usedSet && usedSet.has(candidate.toLowerCase())) {
+    const suffix = ` (${counter})`;
+    const maxBase = 31 - suffix.length;
+    candidate = clean.slice(0, maxBase) + suffix;
+    counter++;
+  }
+  if (usedSet) usedSet.add(candidate.toLowerCase());
+  return candidate;
+}
+
+/**
  * Downloads a specific customer's ledger sheet formatted exactly like the authentic Garment Book statements
  */
 export async function downloadCustomerExcel(customer, transactions, settings = {}) {
@@ -101,53 +123,65 @@ export async function downloadCustomerExcel(customer, transactions, settings = {
 
   const rows = [
     // Header Info
-    [`Customer Ledger Statement: ${customer.name}`],
-    [`Source: ${shopName} Book | Period: ${firstDate} to ${lastDate} | Total Entries: ${txs.length}`],
+    [`CUSTOMER LEDGER STATEMENT: ${(customer.name || 'Party').toUpperCase()}`],
+    [`Source: ${shopName} Book | Phone: ${customer.phone || '-'} | Category: ${customer.category || 'Wholesale'} | Address: ${customer.address || '-'}`],
+    [`Period: ${firstDate} to ${lastDate} | Total Entries: ${txs.length}`],
     [],
     // KPI Summary Table
     ['Total Transactions', 'Total You Gave (Debit)', 'Total You Got (Credit)', 'Net Receivable Balance', 'Account Status'],
     [txs.length, formatAccounting(totalDebit), formatAccounting(totalCredit), formatAccounting(netBalance), accountStatus],
     [],
-    // Detailed Transactions Header
-    ['#', 'Date', 'Time', 'Bill Number', 'Description', 'You Gave (Debit)', 'You Got (Credit)', 'Running Balance']
+    // Detailed Transactions Header with date, time, description, amount
+    ['#', 'Date', 'Time', 'Description', 'Bill #', 'Amount', 'Type', 'You Gave (Debit)', 'You Got (Credit)', 'Running Balance', 'Payment Mode']
   ];
 
   // Populate transaction entries
   running = 0;
-  txs.forEach((t, index) => {
-    const amt = Number(t.amount || 0);
-    const isDebit = t.type === 'give';
-    if (isDebit) {
-      running += amt;
-    } else {
-      running -= amt;
-    }
+  if (txs.length === 0) {
+    rows.push(['-', '-', '-', 'No transactions recorded yet', '-', 0, '-', 0, 0, formatAccounting(0), '-']);
+  } else {
+    txs.forEach((t, index) => {
+      const amt = Number(t.amount || 0);
+      const isDebit = t.type === 'give';
+      if (isDebit) {
+        running += amt;
+      } else {
+        running -= amt;
+      }
 
-    const dateVal = formatDate(t.dateTime || t.date);
-    const timeVal = formatTime(t.dateTime || t.time);
+      const dateVal = formatDate(t.dateTime || t.date);
+      const timeVal = formatTime(t.dateTime || t.time);
 
-    rows.push([
-      index + 1,
-      dateVal,
-      timeVal,
-      t.billNumber && t.billNumber !== '""' ? t.billNumber : '',
-      t.description && t.description !== '""' ? t.description : '',
-      isDebit ? amt : 0,
-      !isDebit ? amt : 0,
-      formatAccounting(running)
-    ]);
-  });
+      rows.push([
+        index + 1,
+        dateVal,
+        timeVal,
+        t.description && t.description !== '""' ? t.description : '-',
+        t.billNumber && t.billNumber !== '""' ? t.billNumber : '-',
+        amt,
+        isDebit ? 'You Gave (ادھار دیا)' : 'You Got (وصولی ملی)',
+        isDebit ? amt : 0,
+        !isDebit ? amt : 0,
+        formatAccounting(running),
+        t.paymentMethod || 'Cash'
+      ]);
+    });
+  }
 
   // Footer Totals Row
+  rows.push([]);
   rows.push([
     'TOTAL',
     '',
     '',
-    '',
     `${txs.length} Transactions`,
+    '',
+    formatAccounting(totalDebit + totalCredit),
+    '',
     formatAccounting(totalDebit),
     formatAccounting(totalCredit),
-    formatAccounting(netBalance)
+    formatAccounting(netBalance),
+    ''
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -157,14 +191,17 @@ export async function downloadCustomerExcel(customer, transactions, settings = {
     { wch: 6 },   // #
     { wch: 14 },  // Date
     { wch: 12 },  // Time
-    { wch: 14 },  // Bill Number
-    { wch: 30 },  // Description
+    { wch: 32 },  // Description
+    { wch: 14 },  // Bill #
+    { wch: 16 },  // Amount
+    { wch: 22 },  // Type
     { wch: 18 },  // You Gave (Debit)
     { wch: 18 },  // You Got (Credit)
-    { wch: 20 }   // Running Balance
+    { wch: 20 },  // Running Balance
+    { wch: 14 }   // Payment Mode
   ];
 
-  const sheetTitle = (customer.name || 'Party').replace(/[:\\/?*\[\]]/g, '').slice(0, 31);
+  const sheetTitle = (customer.name || 'Party').replace(/[:\\/?*\[\]]/g, '').slice(0, 31) || 'Customer Ledger';
   XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
 
   const cleanFilename = (customer.name || 'Party').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -173,12 +210,16 @@ export async function downloadCustomerExcel(customer, transactions, settings = {
 
 /**
  * Downloads a complete multi-sheet Excel file of all customers and all transactions with executive styling
+ * Sheet 1: Master Parties Summary (Executive overview of all customers)
+ * Sheet 2: All Transactions (Consolidated journal of all transactions)
+ * Sheets 3..N: Dedicated Individual Page (Worksheet) for EACH customer with Date, Time, Description, Amount
  */
-export async function downloadAllDataExcel(customers, transactionsMap, settings = {}) {
+export async function downloadAllDataExcel(customers = [], transactionsMap = {}, settings = {}) {
   const wb = XLSX.utils.book_new();
   const shopName = settings.shopName || 'ALI Garments';
   const currency = settings.currency || 'Rs.';
   const todayStr = new Date().toISOString().slice(0, 10);
+  const usedSheetNames = new Set();
 
   // -------------------------------------------------------------
   // Sheet 1: Master Parties Summary (Executive Khata Overview)
@@ -260,13 +301,15 @@ export async function downloadAllDataExcel(customers, transactionsMap, settings 
     { wch: 24 }, // Status
     { wch: 14 }  // Entries
   ];
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Parties Summary');
+  const summaryTitle = 'Parties Summary';
+  usedSheetNames.add(summaryTitle.toLowerCase());
+  XLSX.utils.book_append_sheet(wb, wsSummary, summaryTitle);
 
   // -------------------------------------------------------------
   // Sheet 2: All Detailed Chronological Transactions
   // -------------------------------------------------------------
   const allTxRows = [
-    ['#', 'Date', 'Time', 'Party Name', 'Party Phone', 'Type', 'Description / Goods', 'Bill #', 'You Gave (Debit)', 'You Got (Credit)', 'Running Balance', 'Payment Mode']
+    ['#', 'Date', 'Time', 'Party Name', 'Party Phone', 'Type', 'Description / Goods', 'Bill #', 'Amount', 'You Gave (Debit)', 'You Got (Credit)', 'Running Balance', 'Payment Mode']
   ];
 
   let entryIndex = 1;
@@ -296,6 +339,7 @@ export async function downloadAllDataExcel(customers, transactionsMap, settings 
         isDebit ? 'You Gave (ادھار دیا)' : 'You Got (وصولی ملی)',
         t.description && t.description !== '""' ? t.description : '-',
         t.billNumber && t.billNumber !== '""' ? t.billNumber : '-',
+        amt,
         isDebit ? amt : 0,
         !isDebit ? amt : 0,
         formatAccounting(running),
@@ -314,12 +358,119 @@ export async function downloadAllDataExcel(customers, transactionsMap, settings 
     { wch: 20 }, // Type
     { wch: 30 }, // Description
     { wch: 14 }, // Bill #
+    { wch: 16 }, // Amount
     { wch: 18 }, // Gave
     { wch: 18 }, // Got
     { wch: 20 }, // Running Balance
     { wch: 14 }  // Mode
   ];
-  XLSX.utils.book_append_sheet(wb, wsAllTxs, 'All Transactions');
+  const allTxsTitle = 'All Transactions';
+  usedSheetNames.add(allTxsTitle.toLowerCase());
+  XLSX.utils.book_append_sheet(wb, wsAllTxs, allTxsTitle);
+
+  // -------------------------------------------------------------
+  // Sheets 3..N: Dedicated Individual Page (Worksheet) for EACH customer
+  // Includes all transactions with: Date, Time, Description, Amount, Bill #, Type, Debit, Credit, Running Balance
+  // -------------------------------------------------------------
+  customers.forEach((c, idx) => {
+    const rawTxs = transactionsMap[c.id] || [];
+    const custTxs = [...rawTxs].sort((a, b) => {
+      const timeA = new Date(a.dateTime || a.date).getTime() || 0;
+      const timeB = new Date(b.dateTime || b.date).getTime() || 0;
+      return timeA - timeB;
+    });
+
+    let custDebit = 0;
+    let custCredit = 0;
+    let custRunning = 0;
+
+    custTxs.forEach(t => {
+      const amt = Number(t.amount || 0);
+      if (t.type === 'give') custDebit += amt;
+      else custCredit += amt;
+    });
+
+    const custNet = custDebit - custCredit;
+    const custStatus = custNet > 0
+      ? 'Receivable (Lene Hain)'
+      : custNet < 0
+      ? 'Payable (Dene Hain)'
+      : 'Settled';
+
+    const firstDate = custTxs.length > 0 ? formatDate(custTxs[0].dateTime || custTxs[0].date) : '-';
+    const lastDate = custTxs.length > 0 ? formatDate(custTxs[custTxs.length - 1].dateTime || custTxs[custTxs.length - 1].date) : '-';
+
+    const custPageRows = [
+      [`CUSTOMER LEDGER STATEMENT: ${(c.name || 'Party').toUpperCase()}`],
+      [`Shop: ${shopName} | Phone: ${c.phone || '-'} | Category: ${c.category || 'Wholesale'} | Address: ${c.address || '-'}`],
+      [`Statement Period: ${firstDate} to ${lastDate} | Total Transactions: ${custTxs.length}`],
+      [],
+      // KPI Overview
+      ['Total Entries', 'Total You Gave (Debit)', 'Total You Got (Credit)', 'Net Balance', 'Account Status'],
+      [custTxs.length, formatAccounting(custDebit), formatAccounting(custCredit), formatAccounting(custNet), custStatus],
+      [],
+      // Transaction Table Header
+      ['#', 'Date', 'Time', 'Description / Goods', 'Bill #', 'Amount', 'Transaction Type', 'You Gave (Debit)', 'You Got (Credit)', 'Running Balance', 'Payment Mode']
+    ];
+
+    if (custTxs.length === 0) {
+      custPageRows.push(['-', '-', '-', 'No transactions recorded yet', '-', 0, '-', 0, 0, formatAccounting(0), '-']);
+    } else {
+      custTxs.forEach((t, tIdx) => {
+        const amt = Number(t.amount || 0);
+        const isDebit = t.type === 'give';
+        if (isDebit) custRunning += amt;
+        else custRunning -= amt;
+
+        custPageRows.push([
+          tIdx + 1,
+          formatDate(t.dateTime || t.date),
+          formatTime(t.dateTime || t.time),
+          t.description && t.description !== '""' ? t.description : '-',
+          t.billNumber && t.billNumber !== '""' ? t.billNumber : '-',
+          amt,
+          isDebit ? 'You Gave (ادھار دیا)' : 'You Got (وصولی ملی)',
+          isDebit ? amt : 0,
+          !isDebit ? amt : 0,
+          formatAccounting(custRunning),
+          t.paymentMethod || 'Cash'
+        ]);
+      });
+    }
+
+    custPageRows.push([]);
+    custPageRows.push([
+      'TOTAL',
+      '',
+      '',
+      `${custTxs.length} Transactions`,
+      '',
+      formatAccounting(custDebit + custCredit),
+      '',
+      formatAccounting(custDebit),
+      formatAccounting(custCredit),
+      formatAccounting(custNet),
+      ''
+    ]);
+
+    const wsCustomer = XLSX.utils.aoa_to_sheet(custPageRows);
+    wsCustomer['!cols'] = [
+      { wch: 6 },   // #
+      { wch: 14 },  // Date
+      { wch: 12 },  // Time
+      { wch: 32 },  // Description / Goods
+      { wch: 14 },  // Bill #
+      { wch: 16 },  // Amount
+      { wch: 22 },  // Transaction Type
+      { wch: 18 },  // You Gave (Debit)
+      { wch: 18 },  // You Got (Credit)
+      { wch: 20 },  // Running Balance
+      { wch: 14 }   // Payment Mode
+    ];
+
+    const customerSheetTitle = getUniqueSheetName(c.name, usedSheetNames, idx + 1);
+    XLSX.utils.book_append_sheet(wb, wsCustomer, customerSheetTitle);
+  });
 
   return await saveWorkbook(wb, `${shopName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Complete_Ledger_${todayStr}.xlsx`);
 }
