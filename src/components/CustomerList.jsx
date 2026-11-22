@@ -177,94 +177,43 @@ export default function CustomerList({
               <div
                 key={customer.id}
                 onClick={() => onSelectCustomer(customer)}
-                className={`p-3.5 sm:p-4 cursor-pointer transition-all flex items-center justify-between gap-3 active:scale-[0.99] ${
+                className={`p-3 sm:p-3.5 cursor-pointer transition-all flex items-center justify-between gap-3 active:scale-[0.99] border-b border-slate-100 dark:border-slate-800/60 ${
                   isSelected
                     ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-l-4 border-emerald-600'
                     : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
                 }`}
               >
-                {/* Left: Avatar + Details */}
-                <div className="flex items-center gap-3 min-w-0">
+                {/* Left: Avatar + Full Name + Type */}
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                   <div
-                    className={`w-11 h-11 rounded-2xl font-black text-xs flex items-center justify-center shrink-0 border shadow-xs ${avatarStyle}`}
+                    className={`w-10 h-10 rounded-xl font-black text-xs flex items-center justify-center shrink-0 border shadow-xs ${avatarStyle}`}
                   >
                     {customer.name ? customer.name.slice(0, 2).toUpperCase() : 'AG'}
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {customer.name}
-                      </h3>
-                      {customer.category && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded-md font-semibold capitalize bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
-                          {customer.category}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {customer.phone && (
-                        <a
-                          href={`tel:${customer.phone}`}
-                          onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1 truncate hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                          title="Call Party"
-                        >
-                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="font-mono text-[11px]">{customer.phone}</span>
-                        </a>
-                      )}
-                      {customer.lastTransactionAt && (
-                        <span className="text-[11px] text-slate-400 shrink-0 font-medium">
-                          {new Date(customer.lastTransactionAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
+                  <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white break-words leading-tight">
+                      {customer.name}
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md font-semibold capitalize bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
+                      {customer.category || 'Wholesale'}
+                    </span>
                   </div>
                 </div>
 
-                {/* Right: Balance & Chevron */}
-                <div className="flex items-center gap-2 text-right shrink-0">
-                  <div>
-                    <div
-                      className={`text-sm sm:text-base font-extrabold font-mono tabular-nums whitespace-nowrap leading-tight ${
-                        bal > 0
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : bal < 0
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-slate-500'
-                      }`}
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      {currency}&nbsp;{Math.abs(bal).toLocaleString()}
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold block mt-0.5 ${
-                        bal > 0
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : bal < 0
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Settled (Nil)'}
-                    </span>
+                {/* Right: Balance (Rs Amount Only) */}
+                <div className="text-right shrink-0 pl-2">
+                  <div
+                    className={`text-sm sm:text-base font-extrabold font-mono tabular-nums whitespace-nowrap leading-none ${
+                      bal > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : bal < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {currency}&nbsp;{Math.abs(bal).toLocaleString()}
                   </div>
-                  {onOpenEditCustomer && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenEditCustomer(customer);
-                      }}
-                      className="p-1 rounded-lg text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                      title="Edit Party Details"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                 </div>
               </div>
             );

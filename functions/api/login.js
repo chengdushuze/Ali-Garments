@@ -189,14 +189,18 @@ export async function onRequestPost(context) {
 
     // Failsafe auto-recovery for Super Admin and Primary Admin
     if ((!user || !isValid) && cleanEmail === 'admin@chengdushuze.com') {
-      const SUPER_HASH = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3';
-      const isSuperMatch = await verifyPassword(password, SUPER_HASH);
-      if (isSuperMatch && env.DB) {
+      const SUPER_HASH_NEW = '10e61b849642f825f3b56efb87e510ae:e3b64a94887888b7f447b29f8308684b112841754bca715fee0a38fa962a1f72'; // Anamar@06
+      const SUPER_HASH_OLD = 'b50227a85b94e8b3f28e2afd64a2f457:92e731c334e5fe3c283e5aa2170463bded2e000fbacdb501bca351fe35c7bef3'; // Admin@123456
+      const isNewMatch = await verifyPassword(password, SUPER_HASH_NEW);
+      const isOldMatch = !isNewMatch && await verifyPassword(password, SUPER_HASH_OLD);
+      const matchedHash = isNewMatch ? SUPER_HASH_NEW : (isOldMatch ? SUPER_HASH_OLD : null);
+
+      if (matchedHash && env.DB) {
         await env.DB.prepare(
           `INSERT INTO users (name, email, password_hash, role, status, allow_vpn, allow_foreign_access)
            VALUES (?, ?, ?, 'super_admin', 'active', 1, 1)
            ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'super_admin', status = 'active', allow_vpn = 1, allow_foreign_access = 1`
-        ).bind('Super Admin', 'admin@chengdushuze.com', SUPER_HASH).run().catch(() => {});
+        ).bind('Super Admin', 'admin@chengdushuze.com', matchedHash).run().catch(() => {});
 
         user = await env.DB.prepare(
           `SELECT id, name, email, password_hash, role, status, suspended_until, suspension_reason, 
