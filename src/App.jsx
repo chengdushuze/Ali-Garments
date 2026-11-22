@@ -1317,6 +1317,10 @@ export default function App() {
         onSaveAppLockConfig={handleSaveAppLockConfig}
         onTriggerAppLock={() => setIsAppLocked(true)}
         currentUser={currentUser}
+        onLogout={() => {
+          setIsSettingsOpen(false);
+          setIsLogoutConsentOpen(true);
+        }}
       />
 
       {/* 5. Recycle Bin Modal (30-Day Auto Retention & Multi-Device Sync) */}

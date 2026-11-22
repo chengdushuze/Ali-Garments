@@ -17,7 +17,7 @@ export default function MobileHeader({
   const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
 
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 transition-colors shadow-sm pt-[max(env(safe-area-inset-top),0.5rem)] px-3.5 pb-2.5">
+    <header className="md:hidden sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 transition-colors shadow-sm pt-[max(env(safe-area-inset-top),1.75rem)] px-3.5 pb-2.5">
       <div className="flex items-center justify-between gap-2 max-w-lg mx-auto">
         {/* Left: Brand Avatar & Shop Identity */}
         <div className="flex items-center gap-2.5 min-w-0">
