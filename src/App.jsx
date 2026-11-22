@@ -451,6 +451,7 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState('parties'); // 'parties' or 'stats' for Phone Menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [mobilePartyFilter, setMobilePartyFilter] = useState('all');
+  const [isDesktopStatsCollapsed, setIsDesktopStatsCollapsed] = useState(false);
 
   // Recycle Bin & Consent state
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
@@ -1180,8 +1181,8 @@ export default function App() {
           />
         )}
 
-        {/* On Desktop: Always show stats. On Mobile/Phone: Show stats when Analytics tab active */}
-        <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block pt-2 sm:pt-0' : 'hidden md:block'}`}>
+        {/* On Desktop: Show stats with optional collapse toggle. On Mobile/Phone: Show stats when Analytics tab active */}
+        <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block pt-2 sm:pt-0' : isDesktopStatsCollapsed ? 'hidden' : 'hidden md:block'}`}>
           <DashboardStats
             customers={customers}
             transactionsMap={transactionsMap}
@@ -1191,10 +1192,28 @@ export default function App() {
           />
         </div>
 
+        {/* Desktop Quick Bar: Stats Toggle to Maximize Ledger Height */}
+        <div className="hidden md:flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 py-0.5">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-700 dark:text-slate-300">Khata Ledger Directory</span>
+            {selectedCustomer && (
+              <span className="text-slate-400">• Active Ledger: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{selectedCustomer.name}</strong></span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDesktopStatsCollapsed(!isDesktopStatsCollapsed)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            title="Toggle Dashboard Statistics Cards"
+          >
+            <span>{isDesktopStatsCollapsed ? '📊 Show Dashboard Stats' : '🔼 Hide Stats (Maximize Transaction View)'}</span>
+          </button>
+        </div>
+
         {/* Master-Detail Ledger Grid (Phone: CustomerList or CustomerDetail depending on selection; Desktop: side-by-side) */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start ${mobileTab === 'stats' ? 'hidden md:grid' : 'grid'}`}>
           {/* Left Column: Customer Directory (5 cols on lg, full on mobile if no detail view) */}
-          <div className={`lg:col-span-5 h-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
+          <div className={`lg:col-span-5 h-auto ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
             <CustomerList
               customers={customers}
               onSelectCustomer={cust => setSelectedCustomer(cust)}
@@ -1212,8 +1231,8 @@ export default function App() {
           {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg; Fixed full-screen on mobile so bottom action buttons are always pinned) */}
           <div className={`lg:col-span-7 flex flex-col ${
             selectedCustomer
-              ? 'fixed inset-0 z-40 bg-white dark:bg-slate-900 lg:static lg:z-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px]'
-              : 'hidden lg:block lg:h-[calc(100vh-270px)] lg:min-h-[600px]'
+              ? `fixed inset-0 z-40 bg-white dark:bg-slate-900 lg:static lg:z-auto ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px]`
+              : `hidden lg:block ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px]`
           }`}>
             {selectedCustomer ? (
               <CustomerDetail
