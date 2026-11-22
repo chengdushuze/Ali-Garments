@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { getCachedAuthUser, setCachedAuthUser } from '../services/storage';
 import { apiFetch, setStoredToken } from '../services/apiClient';
+import { checkAccountPasswordRateLimit, recordAccountPasswordFailure, resetAccountPasswordRateLimit } from '../services/rateLimiter';
 
 export default function LoginView({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -31,6 +32,17 @@ export default function LoginView({ onLoginSuccess }) {
       return;
     }
 
+    // Check client-side rate limit & suspension status for this email
+    const rlStatus = checkAccountPasswordRateLimit(cleanEmail);
+    if (rlStatus.isSuspended) {
+      setErrorMessage(rlStatus.errorMessage);
+      return;
+    }
+    if (rlStatus.isLocked) {
+      setErrorMessage(rlStatus.errorMessage);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -53,6 +65,8 @@ export default function LoginView({ onLoginSuccess }) {
       if (response) {
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success && data.user) {
+          resetAccountPasswordRateLimit(cleanEmail);
+          resetAccountPasswordRateLimit('login_' + cleanEmail);
           if (data.token) {
             setStoredToken(data.token);
           }
@@ -60,6 +74,15 @@ export default function LoginView({ onLoginSuccess }) {
           triggerSuccessAnimation(data.user);
           return;
         } else {
+          // If 403 Auto-Suspended or Administrator Suspended
+          if (data.isSuspended || response.status === 403) {
+            recordAccountPasswordFailure(cleanEmail, cleanEmail);
+            const rawMsg = data.error || 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator';
+            setErrorMessage(rawMsg.replace(/\./g, ''));
+            setIsLoading(false);
+            return;
+          }
+
           // If 429 Rate limited (3 attempts / 15 minutes)
           if (response.status === 429 || data.isRateLimited) {
             const rawMsg = data.error || 'Too many failed login attempts (3 maximum) For your security login is locked for 15 minutes';
@@ -68,16 +91,13 @@ export default function LoginView({ onLoginSuccess }) {
             return;
           }
 
-          // If 403 Suspended or Geo/VPN
-          if (data.isSuspended || response.status === 403) {
-            const rawMsg = data.error || 'Your account has been temporarily suspended by an administrator';
-            setErrorMessage(rawMsg.replace(/\./g, ''));
-            setIsLoading(false);
-            return;
-          }
-
-          // Failed credentials (401 or other)
-          const rawMsg = data.error || 'Email or Password Are incorrect';
+          // Failed credentials (401 or other) - record client failure toward 3-lock / 6-suspend
+          const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
+          const rawMsg = rl.isSuspended
+            ? rl.errorMessage
+            : rl.isLocked
+            ? rl.errorMessage
+            : (data.error || rl.errorMessage || 'Email or Password Are incorrect');
           setErrorMessage(rawMsg.replace(/\./g, ''));
           setIsLoading(false);
           return;

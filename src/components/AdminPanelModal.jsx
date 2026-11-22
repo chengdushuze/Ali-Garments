@@ -31,10 +31,11 @@ import {
   Save
 } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
-import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
-
-const ADMIN_GATE_RL_KEY = 'admin_panel_gate';
-const ADMIN_DELETE_USER_RL_KEY = 'admin_delete_user';
+import {
+  checkAccountPasswordRateLimit,
+  recordAccountPasswordFailure,
+  resetAccountPasswordRateLimit
+} from '../services/rateLimiter';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [adminTab, setAdminTab] = useState('users'); // 'users', 'audit', 'backup'
@@ -55,18 +56,25 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isVerifyingGate, setIsVerifyingGate] = useState(false);
   const [gateError, setGateError] = useState('');
   const [gateLockoutSeconds, setGateLockoutSeconds] = useState(0);
+  const [isGateSuspended, setIsGateSuspended] = useState(false);
 
-  // Monitor Gate Rate Limit
+  const gateKey = currentUser?.email || 'admin_gate_password';
+
+  // Monitor Gate Rate Limit (3 attempts / 15 minutes, 6 tries -> auto-suspend)
   useEffect(() => {
     if (!isOpen || isGateUnlocked) return;
     const updateGateRateLimit = () => {
-      const status = getRateLimitStatus(ADMIN_GATE_RL_KEY, 5);
+      const status = checkAccountPasswordRateLimit(gateKey);
       setGateLockoutSeconds(status.secondsLeft);
+      setIsGateSuspended(status.isSuspended);
+      if (status.isSuspended) {
+        setGateError(status.errorMessage);
+      }
     };
     updateGateRateLimit();
     const interval = setInterval(updateGateRateLimit, 1000);
     return () => clearInterval(interval);
-  }, [isOpen, isGateUnlocked]);
+  }, [isOpen, isGateUnlocked, gateKey]);
 
   // Role Change Modal state (Website own popup - Zero Chrome popups!)
   const [roleChangeTarget, setRoleChangeTarget] = useState(null); // { user, targetRole }
@@ -280,6 +288,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
   const handleUnlockAdminGate = async (e) => {
     e.preventDefault();
+    if (isGateSuspended) return;
     if (gateLockoutSeconds > 0) return;
 
     if (!gatePassword) {
@@ -302,16 +311,19 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        const rl = recordRateLimitFailure(ADMIN_GATE_RL_KEY, 5, 30);
+        const rl = recordAccountPasswordFailure(gateKey, currentUser?.email);
         setGateLockoutSeconds(rl.secondsLeft);
-        const errText = rl.isLocked
+        setIsGateSuspended(rl.isSuspended);
+        const errText = rl.isSuspended
+          ? rl.errorMessage
+          : rl.isLocked
           ? rl.errorMessage
           : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
         setGateError(errText);
         return;
       }
 
-      resetRateLimit(ADMIN_GATE_RL_KEY);
+      resetAccountPasswordRateLimit(gateKey, currentUser?.email);
       setIsGateUnlocked(true);
       setGatePassword('');
       fetchUsers();

@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Unlock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X, Clock } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
-import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
+import {
+  getRateLimitStatus,
+  recordRateLimitFailure,
+  resetRateLimit,
+  checkAccountPasswordRateLimit,
+  recordAccountPasswordFailure,
+  resetAccountPasswordRateLimit
+} from '../services/rateLimiter';
 
 const PIN_RATE_LIMIT_KEY = 'app_lock_pin';
-const FORGOT_PW_RATE_LIMIT_KEY = 'app_lock_forgot_pw';
 
 export default function AppLockScreen({
   isLocked,
@@ -25,21 +31,28 @@ export default function AppLockScreen({
   // Rate Limiting & Lockout Countdown states
   const [pinLockoutSeconds, setPinLockoutSeconds] = useState(0);
   const [pwLockoutSeconds, setPwLockoutSeconds] = useState(0);
+  const [isPwSuspended, setIsPwSuspended] = useState(false);
 
   // Check rate limiting on mount & every second
+  const pwKey = currentUser?.email || 'app_lock_password';
+
   useEffect(() => {
     const updateRateLimits = () => {
       const pinStatus = getRateLimitStatus(PIN_RATE_LIMIT_KEY, 5);
       setPinLockoutSeconds(pinStatus.secondsLeft);
 
-      const pwStatus = getRateLimitStatus(FORGOT_PW_RATE_LIMIT_KEY, 5);
+      const pwStatus = checkAccountPasswordRateLimit(pwKey);
       setPwLockoutSeconds(pwStatus.secondsLeft);
+      setIsPwSuspended(pwStatus.isSuspended);
+      if (pwStatus.isSuspended) {
+        setFallbackError(pwStatus.errorMessage);
+      }
     };
 
     updateRateLimits();
     const timer = setInterval(updateRateLimits, 1000);
     return () => clearInterval(timer);
-  }, [isLocked, showPasswordFallback]);
+  }, [isLocked, showPasswordFallback, pwKey]);
 
   // Reset state when locked status changes
   useEffect(() => {
@@ -134,9 +147,10 @@ export default function AppLockScreen({
     setErrorMessage('');
   };
 
-  // Fallback unlock via account password with rate limiting
+  // Fallback unlock via account password with 3-attempt/15-min rate limit & 6-try auto-suspension
   const handlePasswordUnlock = async (e) => {
     e.preventDefault();
+    if (isPwSuspended) return;
     if (pwLockoutSeconds > 0) return;
 
     if (!accountPassword) {
@@ -161,15 +175,18 @@ export default function AppLockScreen({
       if (res.ok && data.success) {
         setIsUnlockSuccess(true);
         resetRateLimit(PIN_RATE_LIMIT_KEY);
-        resetRateLimit(FORGOT_PW_RATE_LIMIT_KEY);
+        resetAccountPasswordRateLimit(pwKey);
         setTimeout(() => {
           onUnlock();
           setIsUnlockSuccess(false);
         }, 650);
       } else {
-        const rl = recordRateLimitFailure(FORGOT_PW_RATE_LIMIT_KEY, 5, 30);
+        const rl = recordAccountPasswordFailure(pwKey, currentUser?.email);
         setPwLockoutSeconds(rl.secondsLeft);
-        const errText = rl.isLocked
+        setIsPwSuspended(rl.isSuspended);
+        const errText = rl.isSuspended
+          ? rl.errorMessage
+          : rl.isLocked
           ? rl.errorMessage
           : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
         setFallbackError(errText);

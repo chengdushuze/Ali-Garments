@@ -25,7 +25,14 @@ import {
 } from 'lucide-react';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
 import { apiFetch } from '../services/apiClient';
-import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
+import {
+  getRateLimitStatus,
+  recordRateLimitFailure,
+  resetRateLimit,
+  checkAccountPasswordRateLimit,
+  recordAccountPasswordFailure,
+  resetAccountPasswordRateLimit
+} from '../services/rateLimiter';
 
 const SETTINGS_CONSENT_RL_KEY = 'settings_consent_verify';
 
@@ -265,7 +272,18 @@ export default function SettingsModal({
       setConsentPassword('');
       setAppLockMsg({ type: 'success', text: 'App Lock has been successfully disabled' });
     } else {
-      // Verify via Account Password
+      // Verify via Account Password (3 attempts / 15 minutes, 6 tries -> auto-suspend)
+      const pwKey = currentUser?.email || 'settings_consent_password';
+      const pwStatus = checkAccountPasswordRateLimit(pwKey);
+      if (pwStatus.isSuspended) {
+        setConsentError(pwStatus.errorMessage);
+        return;
+      }
+      if (pwStatus.isLocked) {
+        setConsentError(pwStatus.errorMessage);
+        return;
+      }
+
       if (!consentPassword) {
         setConsentError('Please enter your account password');
         return;
@@ -284,16 +302,18 @@ export default function SettingsModal({
 
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success) {
-          resetRateLimit(SETTINGS_CONSENT_RL_KEY);
+          resetAccountPasswordRateLimit(pwKey, currentUser?.email);
           onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
           setShowConsentModal(false);
           setConsentPin('');
           setConsentPassword('');
           setAppLockMsg({ type: 'success', text: 'App Lock has been successfully disabled' });
         } else {
-          const rl = recordRateLimitFailure(SETTINGS_CONSENT_RL_KEY, 5, 30);
+          const rl = recordAccountPasswordFailure(pwKey, currentUser?.email);
           setConsentLockoutSeconds(rl.secondsLeft);
-          const errText = rl.isLocked
+          const errText = rl.isSuspended
+            ? rl.errorMessage
+            : rl.isLocked
             ? rl.errorMessage
             : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
           setConsentError(errText);

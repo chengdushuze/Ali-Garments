@@ -81,21 +81,55 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Enforce 15-Minute / 3-Attempt Rate Limiter (Per-IP and Per-Email tracking)
+    // Enforce 15-Minute / 3-Attempt Rate Limiter & 6-Attempt Auto-Suspension
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const dayCutoff = now - DAY_MS;
+
     if (env.DB) {
       await env.DB.prepare('DELETE FROM login_attempts WHERE attempt_time < ?')
-        .bind(cutoff)
+        .bind(dayCutoff)
         .run()
         .catch(() => {});
 
-      // 1. Rate limit check per IP address
+      // Check cumulative failures for this email in 24 hours (6-Attempt Suspension Threshold)
+      const dayFailures = await env.DB.prepare(
+        'SELECT COUNT(*) as total FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
+      )
+        .bind(cleanEmail, dayCutoff)
+        .first();
+
+      const totalEmailFailures = Number(dayFailures?.total || 0);
+
+      if (totalEmailFailures >= 6) {
+        // Automatically suspend user in D1 database (Super admin is protected)
+        await env.DB.prepare(
+          "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
+        ).bind(cleanEmail).run().catch(() => {});
+
+        return new Response(
+          JSON.stringify({
+            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            isSuspended: true,
+            autoSuspended: true
+          }),
+          {
+            status: 403,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      }
+
+      // 1. Rate limit check per IP address (15-minute window)
       const ipStats = await env.DB.prepare(
         'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
       )
         .bind(clientIp, cutoff)
         .first();
 
-      // 2. Rate limit check per Email
+      // 2. Rate limit check per Email (15-minute window)
       const emailStats = await env.DB.prepare(
         'SELECT COUNT(*) as total, MIN(attempt_time) as oldest FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
       )
@@ -236,18 +270,80 @@ export async function onRequestPost(context) {
 
     // If invalid credentials or user not found, record attempt for BOTH IP and email
     if (!user || !isValid) {
+      let emailFailuresCount = 1;
+      let windowFailuresCount = 1;
+
       if (env.DB) {
         await env.DB.prepare('INSERT INTO login_attempts (identifier, attempt_time) VALUES (?, ?), (?, ?)')
           .bind(clientIp, now, cleanEmail, now)
           .run()
           .catch(() => {});
+
+        // Check cumulative failures for 6-try auto-suspension
+        const dayStats = await env.DB.prepare(
+          'SELECT COUNT(*) as total FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
+        ).bind(cleanEmail, now - 24 * 60 * 60 * 1000).first().catch(() => null);
+
+        emailFailuresCount = Number(dayStats?.total || 1);
+
+        // Check 15-minute window failures
+        const winStats = await env.DB.prepare(
+          'SELECT COUNT(*) as total FROM login_attempts WHERE identifier = ? AND attempt_time >= ?'
+        ).bind(cleanEmail, cutoff).first().catch(() => null);
+
+        windowFailuresCount = Number(winStats?.total || 1);
       }
 
       await new Promise(r => setTimeout(r, 500));
+
+      // 1. Auto-suspend user if failed 6 times
+      if (emailFailuresCount >= 6) {
+        if (env.DB) {
+          await env.DB.prepare(
+            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
+          ).bind(cleanEmail).run().catch(() => {});
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            isSuspended: true,
+            autoSuspended: true,
+            totalFailures: emailFailuresCount
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      // 2. 15-Minute Lockout if 3 failures in current window
+      if (windowFailuresCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+        return new Response(
+          JSON.stringify({
+            error: 'Too many failed login attempts (3 maximum) For your security login is locked for 15 minutes',
+            isRateLimited: true,
+            retryAfterMinutes: 15,
+            remainingAttempts: 0,
+            totalFailures: emailFailuresCount
+          }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '900' },
+          }
+        );
+      }
+
+      const attemptsRemaining = Math.max(0, RATE_LIMIT_MAX_ATTEMPTS - windowFailuresCount);
+      const triesUntilSuspension = Math.max(0, 6 - emailFailuresCount);
+
       return new Response(
         JSON.stringify({
-          error: 'Email or Password Are incorrect',
+          error: `Email or Password Are incorrect (${attemptsRemaining} attempt${attemptsRemaining > 1 ? 's' : ''} remaining before 15-minute lock ${triesUntilSuspension} before suspension)`,
           isWrongPassword: true,
+          remainingAttempts: attemptsRemaining,
+          triesUntilSuspension
         }),
         {
           status: 401,
