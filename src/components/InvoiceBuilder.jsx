@@ -13,6 +13,7 @@ import {
   FileText
 } from 'lucide-react';
 import { saveInvoice } from '../services/storage';
+import { downloadInvoiceExcel, downloadInvoiceHtml } from '../services/excelService';
 
 export default function InvoiceBuilder({
   isOpen,
@@ -145,25 +146,29 @@ export default function InvoiceBuilder({
   const grandTotal = taxableAmount + taxAmount;
 
   // Save invoice & sync to D1
+  const [downloadSuccessMsg, setDownloadSuccessMsg] = useState('');
+
+  const buildInvoicePayload = () => ({
+    id: `inv_${Date.now()}`,
+    invoiceNumber,
+    date: invoiceDate,
+    dueDate,
+    customerId: selectedCustomer?.id || '',
+    customerName: selectedCustomer?.name || 'Walk-in Customer',
+    customerPhone: selectedCustomer?.phone || '',
+    customerAddress: selectedCustomer?.address || '',
+    items,
+    subtotal,
+    discount: discountAmount,
+    taxPercent: parseFloat(taxPercent) || 0,
+    taxAmount,
+    total: grandTotal,
+    notes: notes || settings.terms,
+    createdAt: new Date().toISOString()
+  });
+
   const handleSaveAndPrint = async () => {
-    const invoiceData = {
-      id: `inv_${Date.now()}`,
-      invoiceNumber,
-      date: invoiceDate,
-      dueDate,
-      customerId: selectedCustomer?.id || '',
-      customerName: selectedCustomer?.name || 'Walk-in Customer',
-      customerPhone: selectedCustomer?.phone || '',
-      customerAddress: selectedCustomer?.address || '',
-      items,
-      subtotal,
-      discount: discountAmount,
-      taxPercent: parseFloat(taxPercent) || 0,
-      taxAmount,
-      total: grandTotal,
-      notes: notes || settings.terms,
-      createdAt: new Date().toISOString()
-    };
+    const invoiceData = buildInvoicePayload();
 
     // Save to local cache / in-app storage only (Zero D1 credits used)
     await saveInvoice(invoiceData);
@@ -175,6 +180,29 @@ export default function InvoiceBuilder({
     }, 200);
   };
 
+  const handleDownloadInvoice = async (format = 'excel') => {
+    const invoiceData = buildInvoicePayload();
+    await saveInvoice(invoiceData);
+    if (onInvoiceCreated) onInvoiceCreated(invoiceData);
+    setIsSaved(true);
+
+    try {
+      if (format === 'html') {
+        downloadInvoiceHtml(invoiceData, settings);
+        setDownloadSuccessMsg('Invoice downloaded as HTML document');
+      } else {
+        const res = await downloadInvoiceExcel(invoiceData, settings);
+        setDownloadSuccessMsg(`Invoice saved to ${res?.location || 'Downloads folder'}`);
+      }
+      setTimeout(() => setDownloadSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error('Invoice download error:', err);
+      downloadInvoiceHtml(invoiceData, settings);
+      setDownloadSuccessMsg('Invoice downloaded successfully');
+      setTimeout(() => setDownloadSuccessMsg(''), 4000);
+    }
+  };
+
   const handleWhatsAppShare = () => {
     if (!selectedCustomer?.phone) {
       alert('Please add customer phone number to share on WhatsApp');
@@ -184,7 +212,8 @@ export default function InvoiceBuilder({
     let phone = selectedCustomer.phone.replace(/[^0-9]/g, '');
     if (phone.startsWith('0')) phone = '92' + phone.slice(1);
 
-    const text = `*${settings.shopName || 'ALI GARMENTS'} - INVOICE*%0AInvoice No: ${invoiceNumber}%0ADate: ${invoiceDate}%0A*Total Amount: ${currency} ${grandTotal.toLocaleString()}*%0APlease check your bill statement. Shukriya!`;
+    const msg = `*${settings.shopName || 'ALI GARMENTS'} - INVOICE*\nInvoice No: ${invoiceNumber}\nDate: ${invoiceDate}\nCustomer: ${selectedCustomer?.name || 'Valued Customer'}\n*Total Amount: ${currency} ${grandTotal.toLocaleString()}*\nPlease review your invoice statement. Thank you!`;
+    const text = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${text}`, '_blank');
   };
 
@@ -545,6 +574,14 @@ export default function InvoiceBuilder({
           </div>
         </div>
 
+        {/* Download Feedback Banner */}
+        {downloadSuccessMsg && (
+          <div className="no-print mx-4 mt-3 p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{downloadSuccessMsg}</span>
+          </div>
+        )}
+
         {/* Modal Action Controls Footer (No Print) */}
         <div className="no-print p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -557,20 +594,40 @@ export default function InvoiceBuilder({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer"
             >
               Close
             </button>
 
+            {/* Direct Download Excel Invoice Button */}
+            <button
+              onClick={() => handleDownloadInvoice('excel')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              title="Download Excel invoice directly to Downloads folder"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Download Excel</span>
+            </button>
+
+            {/* Direct Download HTML Invoice Button */}
+            <button
+              onClick={() => handleDownloadInvoice('html')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              title="Download HTML invoice file to Downloads"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Download HTML</span>
+            </button>
+
             <button
               onClick={handleSaveAndPrint}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
             >
               <Printer className="w-4 h-4 shrink-0" />
-              <span className="whitespace-nowrap">Save & Print Invoice</span>
+              <span className="whitespace-nowrap">Save & Print</span>
             </button>
           </div>
         </div>

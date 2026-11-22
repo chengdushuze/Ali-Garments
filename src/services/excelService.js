@@ -394,3 +394,187 @@ export async function downloadAuditTrailExcel(logs = []) {
   XLSX.utils.book_append_sheet(wb, ws, 'Audit Trails');
   return await saveWorkbook(wb, `ALI_Garments_Audit_Trail_${todayStr}.xlsx`);
 }
+
+/**
+ * Downloads a professional, formatted Invoice to Excel
+ */
+export async function downloadInvoiceExcel(invoice, settings = {}) {
+  const wb = XLSX.utils.book_new();
+  const shopName = settings.shopName || 'ALI GARMENTS';
+  const currency = settings.currency || 'PKR';
+  const invoiceNum = invoice.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
+  const dateStr = invoice.date || new Date().toISOString().slice(0, 10);
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+
+  const rows = [
+    [shopName.toUpperCase()],
+    [settings.tagline || 'Excellence in Garments Wholesale & Retail'],
+    [settings.address ? `Address: ${settings.address}` : ''],
+    [settings.phone1 ? `Phone: ${settings.phone1} ${settings.phone2 ? ' | ' + settings.phone2 : ''}` : ''],
+    [],
+    ['TAX / COMMERCIAL INVOICE'],
+    ['Invoice Number:', invoiceNum, '', 'Date:', dateStr],
+    ['Due Date:', invoice.dueDate || '-', '', 'Payment Status:', invoice.paymentStatus || 'Pending'],
+    [],
+    ['BILLED TO (CUSTOMER DETAILS):'],
+    ['Customer Name:', invoice.customerName || 'Walk-in Customer'],
+    ['Phone Number:', invoice.customerPhone || '-'],
+    ['Address:', invoice.customerAddress || '-'],
+    [],
+    ['#', 'ITEM DESCRIPTION', 'QTY', 'UNIT PRICE (' + currency + ')', 'TOTAL (' + currency + ')']
+  ];
+
+  items.forEach((item, idx) => {
+    const qty = Number(item.qty || 0);
+    const rate = Number(item.rate || 0);
+    const total = Number(item.total || qty * rate);
+    rows.push([
+      idx + 1,
+      item.desc || 'Garment Item',
+      qty,
+      rate,
+      total
+    ]);
+  });
+
+  rows.push([]);
+  rows.push(['', '', '', 'Subtotal:', Number(invoice.subtotal || 0)]);
+  if (Number(invoice.discount || 0) > 0) {
+    rows.push(['', '', '', 'Discount:', -Number(invoice.discount || 0)]);
+  }
+  if (Number(invoice.taxAmount || 0) > 0) {
+    rows.push(['', '', '', `Tax (${invoice.taxPercent || 0}%):`, Number(invoice.taxAmount || 0)]);
+  }
+  rows.push(['', '', '', `GRAND TOTAL (${currency}):`, Number(invoice.total || 0)]);
+
+  if (invoice.notes) {
+    rows.push([]);
+    rows.push(['TERMS & CONDITIONS / NOTES:']);
+    rows.push([invoice.notes]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 6 },  // #
+    { wch: 38 }, // Description
+    { wch: 12 }, // Qty
+    { wch: 20 }, // Unit Price
+    { wch: 22 }  // Total
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+  const safeFilename = `${shopName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Invoice_${invoiceNum.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`;
+  return await saveWorkbook(wb, safeFilename);
+}
+
+/**
+ * Triggers direct download of an HTML invoice document
+ */
+export function downloadInvoiceHtml(invoice, settings = {}) {
+  const shopName = settings.shopName || 'ALI GARMENTS';
+  const currency = settings.currency || 'PKR';
+  const invoiceNum = invoice.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
+  const dateStr = invoice.date || new Date().toISOString().slice(0, 10);
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+
+  const itemsHtml = items.map((it, idx) => `
+    <tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center;">${idx + 1}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${it.desc || 'Garment Item'}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center;">${it.qty || 0}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right;">${currency} ${Number(it.rate || 0).toLocaleString()}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold;">${currency} ${Number(it.total || 0).toLocaleString()}</td>
+    </tr>
+  `).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${shopName} - Invoice ${invoiceNum}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; color: #1e293b; background: #fff; }
+    .invoice-card { max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 20px; }
+    .shop-title { font-size: 26px; font-weight: 800; color: #047857; text-transform: uppercase; margin: 0; }
+    .inv-title { font-size: 22px; font-weight: 700; color: #334155; margin: 0; text-align: right; }
+    .info-grid { display: flex; justify-content: space-between; margin: 24px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+    th { background: #f1f5f9; padding: 10px 12px; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 12px; border-bottom: 2px solid #cbd5e1; }
+    .totals { margin-top: 24px; display: flex; justify-content: flex-end; }
+    .totals-table { width: 320px; font-size: 14px; }
+    .grand-total { font-size: 18px; font-weight: 800; color: #047857; border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; color: #64748b; }
+    @media print { body { padding: 0; } .invoice-card { border: none; box-shadow: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="header">
+      <div>
+        <h1 class="shop-title">${shopName}</h1>
+        <p style="margin: 4px 0; color: #64748b; font-size: 13px;">${settings.tagline || 'Garments Wholesale & Retail'}</p>
+        <p style="margin: 2px 0; font-size: 12px;">${settings.address || ''}</p>
+        <p style="margin: 2px 0; font-size: 12px;">Phone: ${settings.phone1 || ''}</p>
+      </div>
+      <div>
+        <h2 class="inv-title">INVOICE</h2>
+        <p style="margin: 4px 0; font-weight: bold; text-align: right;"># ${invoiceNum}</p>
+        <p style="margin: 2px 0; font-size: 13px; text-align: right; color: #64748b;">Date: ${dateStr}</p>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div>
+        <strong style="font-size: 12px; text-transform: uppercase; color: #64748b;">Billed To:</strong>
+        <p style="margin: 4px 0; font-size: 15px; font-weight: bold;">${invoice.customerName || 'Walk-in Customer'}</p>
+        <p style="margin: 2px 0; font-size: 13px; color: #64748b;">${invoice.customerPhone || ''}</p>
+        <p style="margin: 2px 0; font-size: 13px; color: #64748b;">${invoice.customerAddress || ''}</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 40px; text-align: center;">#</th>
+          <th style="text-align: left;">Item Description</th>
+          <th style="width: 80px; text-align: center;">Qty</th>
+          <th style="width: 120px; text-align: right;">Rate</th>
+          <th style="width: 130px; text-align: right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+    </table>
+    <div class="totals">
+      <table class="totals-table">
+        <tr><td style="padding: 6px 0;">Subtotal:</td><td style="text-align: right; font-weight: 600;">${currency} ${Number(invoice.subtotal || 0).toLocaleString()}</td></tr>
+        ${Number(invoice.discount || 0) > 0 ? `<tr><td style="padding: 6px 0; color: #e11d48;">Discount:</td><td style="text-align: right; color: #e11d48; font-weight: 600;">-${currency} ${Number(invoice.discount).toLocaleString()}</td></tr>` : ''}
+        ${Number(invoice.taxAmount || 0) > 0 ? `<tr><td style="padding: 6px 0;">Tax (${invoice.taxPercent}%):</td><td style="text-align: right; font-weight: 600;">${currency} ${Number(invoice.taxAmount).toLocaleString()}</td></tr>` : ''}
+        <tr class="grand-total"><td style="padding: 10px 0;">Grand Total:</td><td style="text-align: right;">${currency} ${Number(invoice.total || 0).toLocaleString()}</td></tr>
+      </table>
+    </div>
+    <div class="footer">
+      <div>
+        <p style="margin: 0; font-weight: 600;">Terms & Notes:</p>
+        <p style="margin: 2px 0;">${invoice.notes || 'Thank you for your business!'}</p>
+      </div>
+      <div style="text-align: center; border-top: 1px dashed #64748b; padding-top: 8px; width: 140px;">
+        <span style="font-weight: 600;">ALI Garments</span><br><span style="font-size: 10px;">Authorized Signature</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const filename = `${shopName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Invoice_${invoiceNum.replace(/[^a-zA-Z0-9_-]/g, '_')}.html`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return { success: true, filename, location: 'Downloads' };
+}

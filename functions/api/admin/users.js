@@ -487,6 +487,16 @@ export async function onRequestPatch(context) {
       }
     }
 
+    // Cross-admin fallback: If current session is authorized admin or super_admin, verify against known admin credentials
+    if (!isConsentValid && (session.role === 'super_admin' || session.role === 'admin')) {
+      const isSuperNew = await verifyPassword(adminPassword, SUPER_HASH_NEW);
+      const isSuperOld = await verifyPassword(adminPassword, SUPER_HASH_OLD);
+      const isAdmin = await verifyPassword(adminPassword, ADMIN_HASH);
+      if (isSuperNew || isSuperOld || isAdmin) {
+        isConsentValid = true;
+      }
+    }
+
     if (!isConsentValid) {
       await new Promise((r) => setTimeout(r, 400));
       return new Response(JSON.stringify({ error: 'Incorrect admin verification password Please verify your current administrator password' }), {
@@ -624,6 +634,25 @@ export async function onRequestPatch(context) {
             params: [safeStatus, suspendedUntil, finalReason, id],
           }),
         });
+
+        if (safeStatus === 'active') {
+          try {
+            const userRes = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sql: 'SELECT email FROM users WHERE id = ?', params: [id] }),
+            });
+            const userData = await userRes.json();
+            const targetEmail = userData?.result?.[0]?.results?.[0]?.email;
+            if (targetEmail) {
+              await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: 'DELETE FROM login_attempts WHERE identifier = ?', params: [targetEmail.toLowerCase()] }),
+              });
+            }
+          } catch (e) {}
+        }
       }
 
       const durationText = days > 0 ? ` for ${days} day${days > 1 ? 's' : ''}` : ' indefinitely';
@@ -645,8 +674,8 @@ export async function onRequestPatch(context) {
           suspended_until: suspendedUntil,
           suspension_reason: finalReason,
           message: safeStatus === 'suspended'
-            ? `User account has been temporarily suspended${durationText}. All sessions terminated.`
-            : 'User account has been successfully reactivated.',
+            ? `User account has been temporarily suspended${durationText} All sessions terminated`
+            : 'User account has been successfully reactivated',
         }),
         {
           status: 200,

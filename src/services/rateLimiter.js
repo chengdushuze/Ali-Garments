@@ -52,22 +52,11 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
 
   const key = String(identifier || 'account_password').toLowerCase().trim();
 
-  // 1. Check if user was marked suspended
   const isSuspendedLocally = local?.getItem(STORAGE_PREFIX_SUSPENDED + key) === 'true';
   const totalFailures = Number(local?.getItem(STORAGE_PREFIX_TOTAL_FAILURES + key) || 0);
+  const isSuspended = isSuspendedLocally || totalFailures >= PASSWORD_AUTO_SUSPEND_THRESHOLD;
 
-  if (isSuspendedLocally || totalFailures >= PASSWORD_AUTO_SUSPEND_THRESHOLD) {
-    return {
-      isSuspended: true,
-      isLocked: false,
-      secondsLeft: 0,
-      attemptsLeft: 0,
-      totalFailures,
-      errorMessage: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator'
-    };
-  }
-
-  // 2. Check 15-minute lockout
+  // 1. Check 15-minute lockout FIRST: Do not remove 15 min lock timer until 15 min completes!
   const lockoutUntil = Number(local?.getItem(STORAGE_PREFIX_LOCKOUT + key) || session?.getItem(STORAGE_PREFIX_LOCKOUT + key) || 0);
   const now = Date.now();
 
@@ -75,13 +64,31 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
     const secondsLeft = Math.ceil((lockoutUntil - now) / 1000);
     const minutesLeft = Math.ceil(secondsLeft / 60);
     return {
-      isSuspended: false,
+      isSuspended,
       isLocked: true,
       secondsLeft,
       minutesLeft,
       attemptsLeft: 0,
       totalFailures,
       errorMessage: `Too many failed password attempts (3 maximum) Access is locked for ${formatSecondsToTimer(secondsLeft)}`
+    };
+  }
+
+  // If lockout timer expired (15 minutes completed), clean up expired entry
+  if (lockoutUntil > 0 && now >= lockoutUntil) {
+    local?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
+    session?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
+  }
+
+  // 2. Only after 15 minutes complete: if user was suspended (6 attempts), show login screen correctly so user can send request
+  if (isSuspended) {
+    return {
+      isSuspended: true,
+      isLocked: false,
+      secondsLeft: 0,
+      attemptsLeft: 0,
+      totalFailures,
+      errorMessage: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator'
     };
   }
 
@@ -102,6 +109,7 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
 /**
  * Records a failed account password attempt.
  * Enforces 3 attempts / 15 minutes, and auto-suspends on the 6th failed attempt.
+ * Never removes the 15-minute lock timer until 15 minutes complete.
  * @param {string} identifier
  * @param {string} email
  * @returns {{ isSuspended: boolean, isLocked: boolean, secondsLeft: number, attemptsLeft: number, totalFailures: number, errorMessage: string }}
@@ -119,16 +127,56 @@ export function recordAccountPasswordFailure(identifier = 'account_password', em
   if (emailKey !== key) {
     local?.setItem(STORAGE_PREFIX_TOTAL_FAILURES + emailKey, String(totalFailures));
   }
+  if (email) {
+    local?.setItem('ag_rl_last_email', String(email).toLowerCase().trim());
+  }
+
+  // Increment current 15-minute window attempts
+  const currentAttempts = Number(session?.getItem(STORAGE_PREFIX_ATTEMPTS + key) || 0) + 1;
+  session?.setItem(STORAGE_PREFIX_ATTEMPTS + key, String(currentAttempts));
+  if (emailKey !== key) {
+    session?.setItem(STORAGE_PREFIX_ATTEMPTS + emailKey, String(currentAttempts));
+  }
+
+  const now = Date.now();
+  let lockoutUntil = Number(local?.getItem(STORAGE_PREFIX_LOCKOUT + key) || session?.getItem(STORAGE_PREFIX_LOCKOUT + key) || 0);
+
+  // If 3 attempts reached (or 6 attempts reached), establish 15-minute lock if not already active
+  if (lockoutUntil <= now && (currentAttempts >= PASSWORD_MAX_ATTEMPTS || totalFailures >= PASSWORD_MAX_ATTEMPTS)) {
+    lockoutUntil = now + PASSWORD_LOCKOUT_SECONDS * 1000;
+    local?.setItem(STORAGE_PREFIX_LOCKOUT + key, String(lockoutUntil));
+    session?.setItem(STORAGE_PREFIX_LOCKOUT + key, String(lockoutUntil));
+    if (emailKey !== key) {
+      local?.setItem(STORAGE_PREFIX_LOCKOUT + emailKey, String(lockoutUntil));
+      session?.setItem(STORAGE_PREFIX_LOCKOUT + emailKey, String(lockoutUntil));
+    }
+    session?.removeItem(STORAGE_PREFIX_ATTEMPTS + key);
+    if (emailKey !== key) {
+      session?.removeItem(STORAGE_PREFIX_ATTEMPTS + emailKey);
+    }
+  }
+
+  const secondsLeft = Math.max(0, Math.ceil((lockoutUntil - now) / 1000));
+  const isLocked = secondsLeft > 0;
 
   // Check 6-try Auto-Suspension Threshold
   if (totalFailures >= PASSWORD_AUTO_SUSPEND_THRESHOLD) {
     local?.setItem(STORAGE_PREFIX_SUSPENDED + key, 'true');
-    local?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
-    session?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
     if (emailKey !== key) {
       local?.setItem(STORAGE_PREFIX_SUSPENDED + emailKey, 'true');
-      local?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
-      session?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
+    }
+
+    // DO NOT REMOVE 15-minute lock timer until 15 min complete!
+    if (isLocked) {
+      return {
+        isSuspended: true,
+        isLocked: true,
+        secondsLeft,
+        minutesLeft: Math.ceil(secondsLeft / 60),
+        attemptsLeft: 0,
+        totalFailures,
+        errorMessage: `Too many failed password attempts (3 maximum) For your security access is locked for ${formatSecondsToTimer(secondsLeft)}`
+      };
     }
 
     return {
@@ -141,23 +189,12 @@ export function recordAccountPasswordFailure(identifier = 'account_password', em
     };
   }
 
-  // Increment current 15-minute window attempts
-  const currentAttempts = Number(session?.getItem(STORAGE_PREFIX_ATTEMPTS + key) || 0) + 1;
-  session?.setItem(STORAGE_PREFIX_ATTEMPTS + key, String(currentAttempts));
-
-  // Check 3-attempt / 15-minute lockout
-  if (currentAttempts >= PASSWORD_MAX_ATTEMPTS) {
-    const lockoutUntil = Date.now() + PASSWORD_LOCKOUT_SECONDS * 1000;
-    local?.setItem(STORAGE_PREFIX_LOCKOUT + key, String(lockoutUntil));
-    session?.setItem(STORAGE_PREFIX_LOCKOUT + key, String(lockoutUntil));
-    // Reset window counter for the next window after lockout
-    session?.removeItem(STORAGE_PREFIX_ATTEMPTS + key);
-
+  if (isLocked) {
     return {
       isSuspended: false,
       isLocked: true,
-      secondsLeft: PASSWORD_LOCKOUT_SECONDS,
-      minutesLeft: 15,
+      secondsLeft,
+      minutesLeft: Math.ceil(secondsLeft / 60),
       attemptsLeft: 0,
       totalFailures,
       errorMessage: 'Too many failed password attempts (3 maximum) For your security access is locked for 15 minutes'

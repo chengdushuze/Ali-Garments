@@ -218,7 +218,8 @@ export async function onRequestPost(context) {
     });
   } catch (error) {
     console.error('D1 execution error:', error);
-    return new Response(JSON.stringify({ success: false, error: 'Something went wrong. Please try again.' }), {
+    const rawMsg = error?.message ? String(error.message).replace(/\./g, '') : 'Database execution failed';
+    return new Response(JSON.stringify({ success: false, error: `D1 operation failed: ${rawMsg}` }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

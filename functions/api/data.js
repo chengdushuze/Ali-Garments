@@ -37,7 +37,8 @@ export async function onRequestGet(context) {
     });
   } catch (error) {
     console.error('Data GET error:', error);
-    return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
+    const rawMsg = error?.message ? String(error.message).replace(/\./g, '') : 'Data retrieval failed';
+    return new Response(JSON.stringify({ error: `Data query failed: ${rawMsg}` }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -96,7 +97,8 @@ export async function onRequestPost(context) {
     });
   } catch (error) {
     console.error('Data POST error:', error);
-    return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
+    const rawMsg = error?.message ? String(error.message).replace(/\./g, '') : 'Data creation failed';
+    return new Response(JSON.stringify({ error: `Save failed: ${rawMsg}` }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -140,7 +142,8 @@ export async function onRequestDelete(context) {
     });
   } catch (error) {
     console.error('Data DELETE error:', error);
-    return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), {
+    const rawMsg = error?.message ? String(error.message).replace(/\./g, '') : 'Data deletion failed';
+    return new Response(JSON.stringify({ error: `Delete failed: ${rawMsg}` }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

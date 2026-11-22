@@ -90,6 +90,14 @@ export default function CustomerDetail({
     return true;
   });
 
+  // Sort filtered transactions: latest transaction at the top, oldest on last
+  const sortedFilteredTxs = [...filteredTxs].sort((a, b) => {
+    const timeA = new Date(a.dateTime || a.date || a.createdAt || 0).getTime() || 0;
+    const timeB = new Date(b.dateTime || b.date || b.createdAt || 0).getTime() || 0;
+    if (timeB !== timeA) return timeB - timeA;
+    return (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
+
   // Calculate totals
   let totalGiven = 0; // Debit
   let totalGot = 0;   // Credit
@@ -99,10 +107,10 @@ export default function CustomerDetail({
     else totalGot += amt;
   });
 
-  // WhatsApp reminder message
+  // WhatsApp reminder message in English
   const handleSendWhatsAppReminder = () => {
     if (!customer.phone) {
-      alert('Please add a phone number for this customer first.');
+      alert('Please add a phone number for this customer first');
       return;
     }
 
@@ -112,15 +120,17 @@ export default function CustomerDetail({
     }
 
     const shopName = settings.shopName || 'ALI Garments';
-    let text = '';
+    const contactLine = settings.phone1 ? `\nContact: ${settings.phone1}` : '';
+    let msg = '';
     if (bal > 0) {
-      text = `السلام علیکم ${customer.name} صاحب!%0A${shopName} کی طرف سے آپ کے کھاتے کا بقایا بیلنس ${currency} ${bal.toLocaleString()} ہے۔%0Aبراہ کرم جلد ادائیگی کو یقینی بنائیں۔ جزاک اللہ!%0Aرابطہ: ${settings.phone1 || ''}`;
+      msg = `Dear ${customer.name},\nThis is a balance reminder from ${shopName}.\nYour outstanding balance is ${currency} ${bal.toLocaleString()}.\nPlease arrange the payment at your earliest convenience.\nThank you!${contactLine}`;
     } else if (bal < 0) {
-      text = `السلام علیکم ${customer.name} صاحب!%0A${shopName} کی طرف سے آپ کے کھاتے میں ہمارے ذمہ بقایا ${currency} ${Math.abs(bal).toLocaleString()} ہے۔%0Aشکریہ!%0Aرابطہ: ${settings.phone1 || ''}`;
+      msg = `Dear ${customer.name},\nThis is an account statement from ${shopName}.\nWe have an advance credit balance of ${currency} ${Math.abs(bal).toLocaleString()} in your account.\nThank you!${contactLine}`;
     } else {
-      text = `السلام علیکم ${customer.name} صاحب!%0A${shopName} کی طرف سے آپ کا کھاتہ بالکل برابر (Nil Balance) ہے۔ شکریہ!`;
+      msg = `Dear ${customer.name},\nThis is an account statement from ${shopName}.\nYour account is fully cleared with a Nil / settled balance (0).\nThank you!${contactLine}`;
     }
 
+    const text = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${text}`, '_blank');
   };
 
@@ -131,10 +141,10 @@ export default function CustomerDetail({
   };
 
   const handleSelectAllTxs = () => {
-    if (selectedTxIds.length === filteredTxs.length) {
+    if (selectedTxIds.length === sortedFilteredTxs.length) {
       setSelectedTxIds([]);
     } else {
-      setSelectedTxIds(filteredTxs.map(t => t.id));
+      setSelectedTxIds(sortedFilteredTxs.map(t => t.id));
     }
   };
 
@@ -547,12 +557,12 @@ export default function CustomerDetail({
             This Month
           </button>
 
-          {filteredTxs.length > 0 && (
+          {sortedFilteredTxs.length > 0 && (
             <button
               onClick={handleSelectAllTxs}
               className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline px-1"
             >
-              {selectedTxIds.length === filteredTxs.length ? 'Deselect All' : 'Select for Invoice'}
+              {selectedTxIds.length === sortedFilteredTxs.length ? 'Deselect All' : 'Select for Invoice'}
             </button>
           )}
         </div>
@@ -560,7 +570,7 @@ export default function CustomerDetail({
 
       {/* Transaction Feed (With pb-28 so it never hides behind the mobile bottom nav) */}
       <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-slate-100 dark:divide-slate-800/80 p-2 sm:p-3 space-y-2 pb-28 md:pb-8">
-        {filteredTxs.length === 0 ? (
+        {sortedFilteredTxs.length === 0 ? (
           <div className="p-10 text-center space-y-2">
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               No transactions recorded yet
@@ -570,7 +580,7 @@ export default function CustomerDetail({
             </p>
           </div>
         ) : (
-          filteredTxs.map(tx => {
+          sortedFilteredTxs.map(tx => {
             const isDebit = tx.type === 'give'; // Maal Diya
             const isSelected = selectedTxIds.includes(tx.id);
             const dateObj = new Date(tx.dateTime || tx.date);

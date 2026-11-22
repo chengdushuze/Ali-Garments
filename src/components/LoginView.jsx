@@ -30,16 +30,13 @@ export default function LoginView({ onLoginSuccess }) {
 
       const status = checkAccountPasswordRateLimit(targetIdentifier);
 
-      if (status.isSuspended) {
-        setIsAutoSuspended(true);
-        setLockoutSecondsLeft(0);
-      } else if (status.isLocked && status.secondsLeft > 0) {
+      if (status.secondsLeft > 0) {
         setLockoutSecondsLeft(status.secondsLeft);
-        setIsAutoSuspended(false);
       } else {
         setLockoutSecondsLeft(0);
-        setIsAutoSuspended(false);
       }
+
+      setIsAutoSuspended(!!status.isSuspended);
     };
 
     updateRateLimitCache();
@@ -113,7 +110,9 @@ export default function LoginView({ onLoginSuccess }) {
           if (data.isSuspended || response.status === 403) {
             const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
             setIsAutoSuspended(true);
-            setLockoutSecondsLeft(0);
+            if (rl.secondsLeft > 0) {
+              setLockoutSecondsLeft(rl.secondsLeft);
+            }
             const rawMsg = data.error || 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator';
             setErrorMessage(rawMsg.replace(/\./g, ''));
             setIsLoading(false);
@@ -133,11 +132,13 @@ export default function LoginView({ onLoginSuccess }) {
 
           // Failed credentials (401 or other) - record client failure toward 3-lock / 6-suspend
           const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
+          if (rl.secondsLeft > 0) {
+            setLockoutSecondsLeft(rl.secondsLeft);
+          } else {
+            setLockoutSecondsLeft(0);
+          }
           if (rl.isSuspended) {
             setIsAutoSuspended(true);
-            setLockoutSecondsLeft(0);
-          } else if (rl.isLocked && rl.secondsLeft > 0) {
-            setLockoutSecondsLeft(rl.secondsLeft);
           }
           const rawMsg = rl.isSuspended
             ? rl.errorMessage
@@ -264,7 +265,7 @@ export default function LoginView({ onLoginSuccess }) {
           )}
 
           {/* 6-Attempt Suspension Notice Banner (login screen shown correctly so user can send request) */}
-          {isAutoSuspended && lockoutSecondsLeft === 0 && (
+          {isAutoSuspended && (
             <div className="mb-3 p-3 rounded-xl bg-amber-950/70 border border-amber-700/70 text-amber-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
               <div className="flex-1 font-medium leading-tight">

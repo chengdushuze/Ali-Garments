@@ -12,6 +12,7 @@ import {
 } from '../services/rateLimiter';
 
 const PIN_RATE_LIMIT_KEY = 'app_lock_pin';
+const FORGOT_PW_RATE_LIMIT_KEY = 'app_lock_forgot_pw';
 
 export default function AppLockScreen({
   isLocked,
@@ -63,6 +64,11 @@ export default function AppLockScreen({
       setShowPasswordFallback(false);
       setAccountPassword('');
       setFallbackError('');
+      setIsUnlockSuccess(false);
+    } else {
+      setIsUnlockSuccess(false);
+      setEnteredPin('');
+      setErrorMessage('');
     }
   }, [isLocked]);
 
@@ -120,12 +126,20 @@ export default function AppLockScreen({
     if (nextPin.length === 4) {
       if (nextPin === configuredPin) {
         setIsUnlockSuccess(true);
-        resetRateLimit(PIN_RATE_LIMIT_KEY);
-        resetRateLimit(FORGOT_PW_RATE_LIMIT_KEY);
+        try {
+          resetRateLimit(PIN_RATE_LIMIT_KEY);
+          resetRateLimit(FORGOT_PW_RATE_LIMIT_KEY);
+          resetAccountPasswordRateLimit(pwKey);
+        } catch (e) {
+          console.warn('App lock reset error:', e);
+        }
         setTimeout(() => {
-          onUnlock();
+          if (typeof onUnlock === 'function') {
+            onUnlock();
+          }
           setIsUnlockSuccess(false);
-        }, 650);
+          setEnteredPin('');
+        }, 550);
       } else {
         const res = recordRateLimitFailure(PIN_RATE_LIMIT_KEY, 5, 30);
         setPinLockoutSeconds(res.secondsLeft);

@@ -47,7 +47,7 @@ export default function UserItemsManager({ currentUser }) {
       if (!res.ok || !data.success) {
         setMessage({
           type: 'error',
-          text: data.error || 'Something went wrong. Please try again.',
+          text: (data.error || 'Failed to save item Please check connection and try again').replace(/\./g, ''),
         });
         setIsAdding(false);
         return;
@@ -55,11 +55,11 @@ export default function UserItemsManager({ currentUser }) {
 
       setNewContent('');
       fetchItems();
-      setMessage({ type: 'success', text: 'Item saved securely to your private workspace.' });
+      setMessage({ type: 'success', text: 'Item saved securely to your private workspace' });
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } catch (err) {
       console.error('Add item error:', err);
-      setMessage({ type: 'error', text: 'Something went wrong. Please try again.' });
+      setMessage({ type: 'error', text: 'Connection failed Please check your network and try again' });
     } finally {
       setIsAdding(false);
     }
@@ -78,12 +78,12 @@ export default function UserItemsManager({ currentUser }) {
       } else {
         setMessage({
           type: 'error',
-          text: data.error || 'Something went wrong. Please try again.',
+          text: (data.error || 'Failed to delete item Please try again').replace(/\./g, ''),
         });
       }
     } catch (err) {
       console.error('Delete item error:', err);
-      setMessage({ type: 'error', text: 'Something went wrong. Please try again.' });
+      setMessage({ type: 'error', text: 'Connection failed Please check your network and try again' });
     } finally {
       setDeletingId(null);
     }
