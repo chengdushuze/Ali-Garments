@@ -302,10 +302,10 @@ export default function CustomerDetail({
       </div>
 
       {/* Transaction Feed */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+      <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-slate-100 dark:divide-slate-800/80 p-2 sm:p-3 space-y-2">
         {filteredTxs.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+          <div className="p-10 text-center space-y-2">
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               No transactions recorded yet
             </p>
             <p className="text-xs text-slate-400">
@@ -327,94 +327,98 @@ export default function CustomerDetail({
             return (
               <div
                 key={tx.id}
-                className={`p-3.5 sm:p-4 transition-colors flex items-center justify-between gap-3 ${
-                  isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                className={`p-3 sm:p-3.5 rounded-2xl border transition-all ${
+                  isSelected
+                    ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800'
+                    : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 shadow-xs'
                 }`}
               >
-                {/* Left: Checkbox + Date & Description */}
-                <div className="flex items-start gap-3 min-w-0">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleToggleSelectTx(tx.id)}
-                    className="mt-1 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                          isDebit
-                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
-                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                        }`}
-                      >
-                        {isDebit ? 'Maal Diya (Debit)' : 'Paisa Mila (Credit)'}
-                      </span>
-                      {tx.billNumber && (
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                          Bill: #{tx.billNumber}
-                        </span>
-                      )}
-                      {tx.paymentMethod && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
-                          {tx.paymentMethod}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200 mt-1 truncate">
-                      {tx.description || (isDebit ? 'Garments / Goods Supplied' : 'Payment Received')}
-                    </p>
-
-                    {/* Date and Time */}
-                    <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        {formattedDate}
-                      </span>
-                      {formattedTime && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          {formattedTime}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Amount & Actions */}
-                <div className="flex items-center gap-3 text-right flex-shrink-0">
-                  <div>
-                    <div
-                      className={`text-base font-bold font-mono tabular-nums whitespace-nowrap ${
-                        isDebit
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-emerald-600 dark:text-emerald-400'
-                      }`}
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      {isDebit ? '+' : '-'} {currency}&nbsp;{Number(tx.amount || 0).toLocaleString()}
-                    </div>
-                    {tx.balanceAfter !== undefined && (
-                      <span className="text-[10px] text-slate-400 block font-mono whitespace-nowrap" style={{ whiteSpace: 'nowrap' }}>
-                        Bal: {currency}&nbsp;{Number(tx.balanceAfter).toLocaleString()}
-                      </span>
+                {/* LINE 1: Date & Time on Left, Tag Badge on Right (EXACT SAME LINE) */}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700/50 pb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="text-slate-700 dark:text-slate-300">{formattedDate}</span>
+                    {formattedTime && (
+                      <>
+                        <span className="text-slate-300 dark:text-slate-600">•</span>
+                        <span className="text-[11px] text-slate-400">{formattedTime}</span>
+                      </>
                     )}
                   </div>
 
-                  <button
-                    onClick={() => {
-                      if (onRequestDeleteTransaction) {
-                        onRequestDeleteTransaction(customer, tx);
-                      } else if (onDeleteTransaction) {
-                        onDeleteTransaction(customer.id, tx.id);
-                      }
-                    }}
-                    title="Delete Entry (Move to Recycle Bin for 30 Days)"
-                    className="p-1 text-slate-300 hover:text-rose-500 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Tag on the EXACT SAME LINE: Paisa Mila (Credit) or Maal Diya (Debit) */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                        isDebit
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60'
+                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDebit ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                      {isDebit ? 'Maal Diya (Debit)' : 'Paisa Mila (Credit)'}
+                    </span>
+                    {tx.billNumber && (
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+                        #{tx.billNumber}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* LINE 2: Description & Payment Mode on Left, Amount & Running Balance on Right */}
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelectTx(tx.id)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                        {tx.description || (isDebit ? 'Garments / Goods Supplied' : 'Payment Received')}
+                      </p>
+                      {tx.paymentMethod && (
+                        <span className="text-[10px] text-slate-400 font-medium block">
+                          Mode: {tx.paymentMethod}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Amount & Running Balance + Delete Icon */}
+                  <div className="text-right shrink-0 flex items-center gap-2.5">
+                    <div>
+                      <div
+                        className={`text-sm sm:text-base font-black font-mono tabular-nums leading-none ${
+                          isDebit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {isDebit ? '+' : '-'} {currency}&nbsp;{Number(tx.amount || 0).toLocaleString()}
+                      </div>
+                      {tx.balanceAfter !== undefined && (
+                        <span className="text-[10px] text-slate-400 font-mono mt-1 block leading-none">
+                          Bal: {currency}&nbsp;{Number(tx.balanceAfter).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onRequestDeleteTransaction) {
+                          onRequestDeleteTransaction(customer, tx);
+                        } else if (onDeleteTransaction) {
+                          onDeleteTransaction(customer.id, tx.id);
+                        }
+                      }}
+                      title="Delete Entry (Move to Recycle Bin for 30 Days)"
+                      className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -422,23 +426,25 @@ export default function CustomerDetail({
         )}
       </div>
 
-      {/* Sticky Bottom Actions: You Gave (Debit) vs You Got (Credit) */}
-      <div className="sticky bottom-[72px] md:bottom-0 z-30 p-2.5 sm:p-4 border-t border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md grid grid-cols-2 gap-2 sm:gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]">
+      {/* Fixed / Pinned Action Bar at Bottom of Customer Detail (Thumb Reach, Zero Scrolling Needed) */}
+      <div className="p-3 sm:p-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-[0_-6px_25px_rgba(0,0,0,0.12)] grid grid-cols-2 gap-3 shrink-0 pb-safe">
         {/* You Gave (Debit / Maal Diya) */}
         <button
+          type="button"
           onClick={() => onOpenAddTransaction(customer, 'give')}
-          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white shadow-lg shadow-rose-600/25 transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-2 py-3.5 px-3 sm:px-4 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-[0.98] text-white shadow-lg shadow-rose-600/30 transition-all whitespace-nowrap cursor-pointer"
         >
-          <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 stroke-[2.5]" />
           <span className="whitespace-nowrap">You Gave (ادھار دیا)</span>
         </button>
 
         {/* You Got (Credit / Paisa Mila) */}
         <button
+          type="button"
           onClick={() => onOpenAddTransaction(customer, 'get')}
-          className="flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-3 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-lg shadow-emerald-600/25 transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-2 py-3.5 px-3 sm:px-4 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white shadow-lg shadow-emerald-600/30 transition-all whitespace-nowrap cursor-pointer"
         >
-          <ArrowDownLeft className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          <ArrowDownLeft className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 stroke-[2.5]" />
           <span className="whitespace-nowrap">You Got (وصولی ملی)</span>
         </button>
       </div>

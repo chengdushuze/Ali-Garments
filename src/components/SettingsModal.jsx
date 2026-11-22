@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  Database,
   Building,
   CreditCard,
   Download,
@@ -11,15 +10,15 @@ import {
   RefreshCw,
   Image,
   QrCode,
-  Key,
   ShieldCheck,
   FileSpreadsheet,
   Clock,
-  HardDriveDownload,
   Lock,
   Eye,
   EyeOff,
-  KeyRound
+  KeyRound,
+  ShieldAlert,
+  ChevronRight
 } from 'lucide-react';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
 import { apiFetch } from '../services/apiClient';
@@ -32,11 +31,11 @@ export default function SettingsModal({
   onDownloadAllExcel,
   customers,
   transactionsMap,
-  appLockConfig = { enabled: false, pin: '', autoLockMinutes: 0 },
+  appLockConfig = { enabled: false, pin: '', autoLockMinutes: 10 },
   onSaveAppLockConfig,
-  onTriggerAppLock
+  onTriggerAppLock,
+  currentUser
 }) {
-  const [activeTab, setActiveTab] = useState('company'); // 'company', 'payments', 'backup', 'app_lock'
   const [formData, setFormData] = useState({ ...settings });
 
   // App Lock Form State
@@ -46,6 +45,15 @@ export default function SettingsModal({
   const [isChangingPin, setIsChangingPin] = useState(false);
   const [appLockMsg, setAppLockMsg] = useState({ type: '', text: '' });
   const [showPin, setShowPin] = useState(false);
+
+  // App Lock Consent Verification (Required to disable App Lock)
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentVerificationType, setConsentVerificationType] = useState('pin'); // 'pin' or 'password'
+  const [consentPin, setConsentPin] = useState('');
+  const [consentPassword, setConsentPassword] = useState('');
+  const [consentError, setConsentError] = useState('');
+  const [isVerifyingConsent, setIsVerifyingConsent] = useState(false);
+
   const [backupInfo, setBackupInfo] = useState({
     cloudTime: null,
     cloudDetails: null,
@@ -75,10 +83,14 @@ export default function SettingsModal({
   };
 
   useEffect(() => {
-    if (isOpen && activeTab === 'backup') {
+    if (isOpen) {
+      setFormData({ ...settings });
       fetchCloudBackupInfo();
+      setAppLockMsg({ type: '', text: '' });
+      setIsChangingPin(false);
+      setShowConsentModal(false);
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen, settings]);
 
   if (!isOpen) return null;
 
@@ -118,6 +130,14 @@ export default function SettingsModal({
     onClose();
   };
 
+  // Smooth scroll to a section on the same screen
+  const scrollToSection = (sectionId) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   // Full JSON Backup
   const handleDownloadBackup = async () => {
     const backup = await getFullBackupData();
@@ -154,18 +174,74 @@ export default function SettingsModal({
     reader.readAsText(file);
   };
 
+  // Verify Consent to Disable App Lock
+  const handleVerifyConsentAndDisableAppLock = async (e) => {
+    e.preventDefault();
+    setConsentError('');
+
+    if (consentVerificationType === 'pin') {
+      if (!consentPin) {
+        setConsentError('Please enter your current 4-digit PIN');
+        return;
+      }
+      if (consentPin !== appLockConfig.pin) {
+        setConsentError('Current PIN is incorrect');
+        return;
+      }
+      // Verified with current PIN
+      onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
+      setShowConsentModal(false);
+      setConsentPin('');
+      setConsentPassword('');
+      setAppLockMsg({ type: 'success', text: 'App Lock has been successfully disabled' });
+    } else {
+      // Verify via Account Password
+      if (!consentPassword) {
+        setConsentError('Please enter your account password');
+        return;
+      }
+
+      setIsVerifyingConsent(true);
+      try {
+        const res = await apiFetch('/api/admin/verify-admin-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password: consentPassword,
+            action: 'disable_app_lock'
+          })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
+          setShowConsentModal(false);
+          setConsentPin('');
+          setConsentPassword('');
+          setAppLockMsg({ type: 'success', text: 'App Lock has been successfully disabled' });
+        } else {
+          setConsentError(data.error || 'Incorrect account password');
+        }
+      } catch (err) {
+        setConsentError('Verification failed. Check network connection');
+      } finally {
+        setIsVerifyingConsent(false);
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-black/75 backdrop-blur-sm overflow-hidden animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 md:rounded-3xl max-w-2xl w-full h-full md:h-auto md:max-h-[90vh] shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-        {/* Header (Clean, Mobile App-Friendly with Back/Close) */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/40 shrink-0">
+      <div className="bg-white dark:bg-slate-900 md:rounded-3xl max-w-2xl w-full h-full md:h-auto md:max-h-[92vh] shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-950/50 shrink-0">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Building className="w-5 h-5 text-emerald-600" />
-              <span>App Settings • ترتیبات</span>
+              <span>Settings • ترتیبات</span>
             </h3>
-            <p className="text-xs text-slate-500">
-              Customize Company Profile, Invoicing, Payments & App Lock
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Company Profile, Payments & QR, App Lock & Data Backup (All on one screen)
             </p>
           </div>
           <button
@@ -177,69 +253,67 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* Tab Navigation (Clean pills, no raw DB credentials shown in app) */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 bg-slate-50/50 dark:bg-slate-950/30 overflow-x-auto text-xs font-medium shrink-0">
+        {/* Quick-Jump Section Navigation Bar (Pills that smoothly scroll) */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800 px-3 py-2 bg-slate-100/70 dark:bg-slate-950/30 overflow-x-auto no-scrollbar gap-2 shrink-0 text-xs">
           <button
-            onClick={() => setActiveTab('company')}
-            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-              activeTab === 'company'
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            type="button"
+            onClick={() => scrollToSection('sec-company')}
+            className="px-3 py-1.5 rounded-xl font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-500 hover:text-emerald-600 shrink-0 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
           >
-            <Building className="w-4 h-4" />
+            <Building className="w-3.5 h-3.5 text-emerald-600" />
             <span>Company & Logo</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('payments')}
-            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-              activeTab === 'payments'
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            type="button"
+            onClick={() => scrollToSection('sec-payments')}
+            className="px-3 py-1.5 rounded-xl font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-500 hover:text-emerald-600 shrink-0 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
           >
-            <CreditCard className="w-4 h-4" />
+            <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
             <span>Payment Info & QR</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('backup')}
-            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-              activeTab === 'backup'
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            type="button"
+            onClick={() => scrollToSection('sec-applock')}
+            className="px-3 py-1.5 rounded-xl font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-500 hover:text-emerald-600 shrink-0 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
           >
-            <Download className="w-4 h-4" />
-            <span>Backup & Export</span>
+            <Lock className="w-3.5 h-3.5 text-emerald-600" />
+            <span>App Lock & PIN</span>
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('app_lock');
-              setAppLockMsg({ type: '', text: '' });
-              setIsChangingPin(false);
-              setNewPin('');
-              setConfirmPin('');
-              setCurrentPinCheck('');
-            }}
-            className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
-              activeTab === 'app_lock'
-                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            type="button"
+            onClick={() => scrollToSection('sec-backup')}
+            className="px-3 py-1.5 rounded-xl font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-emerald-500 hover:text-emerald-600 shrink-0 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
           >
-            <Lock className="w-4 h-4 text-emerald-500" />
-            <span>App Lock (APK)</span>
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Backup & Export</span>
           </button>
         </div>
 
-        {/* Tab Body (Full scrolling on mobile, padded for bottom button) */}
-        <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto pb-24 md:pb-6">
-          {/* TAB 1: COMPANY & LOGO */}
-          {activeTab === 'company' && (
-            <div className="space-y-4 text-xs">
+        {/* Unified Scrollable Container: ALL 4 SECTIONS VISIBLE TOGETHER */}
+        <div className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto pb-28 md:pb-8">
+          
+          {/* ========================================================= */}
+          {/* SECTION 1: COMPANY PROFILE & LOGO                         */}
+          {/* ========================================================= */}
+          <section id="sec-company" className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800">
+                <Building className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Company Profile & Logo • کمپنی تفصیل
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Shop branding, phone numbers, and invoice header details
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
@@ -247,7 +321,7 @@ export default function SettingsModal({
                   </label>
                   <input
                     type="text"
-                    value={formData.shopName}
+                    value={formData.shopName || ''}
                     onChange={e => handleChange('shopName', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold"
                   />
@@ -259,7 +333,7 @@ export default function SettingsModal({
                   </label>
                   <input
                     type="text"
-                    value={formData.currency}
+                    value={formData.currency || 'Rs.'}
                     onChange={e => handleChange('currency', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
@@ -272,7 +346,7 @@ export default function SettingsModal({
                 </label>
                 <input
                   type="text"
-                  value={formData.shopTagline}
+                  value={formData.shopTagline || ''}
                   onChange={e => handleChange('shopTagline', e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                 />
@@ -285,7 +359,7 @@ export default function SettingsModal({
                   </label>
                   <input
                     type="text"
-                    value={formData.phone1}
+                    value={formData.phone1 || ''}
                     onChange={e => handleChange('phone1', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
@@ -296,7 +370,7 @@ export default function SettingsModal({
                   </label>
                   <input
                     type="text"
-                    value={formData.phone2}
+                    value={formData.phone2 || ''}
                     onChange={e => handleChange('phone2', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
@@ -309,28 +383,16 @@ export default function SettingsModal({
                 </label>
                 <input
                   type="text"
-                  value={formData.address}
+                  value={formData.address || ''}
                   onChange={e => handleChange('address', e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                  NTN / TRN Tax ID
-                </label>
-                <input
-                  type="text"
-                  value={formData.ntn}
-                  onChange={e => handleChange('ntn', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
-                />
-              </div>
-
-              {/* Logo Upload */}
+              {/* Logo Upload & Preview */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Custom Invoice & App Logo
+                  Custom Logo (App & Invoices)
                 </label>
                 <div className="flex items-center gap-4">
                   {formData.logoUrl ? (
@@ -349,91 +411,98 @@ export default function SettingsModal({
                       type="file"
                       accept="image/*"
                       onChange={handleLogoUpload}
-                      className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                      className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
                     />
                     <p className="text-[10px] text-slate-400">PNG, JPG or SVG (Max 2MB)</p>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </section>
 
-          {/* TAB 3: PAYMENTS & QR */}
-          {activeTab === 'payments' && (
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                  Bank Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Meezan Bank / HBL"
-                  value={formData.bankName}
-                  onChange={e => handleChange('bankName', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                />
+          {/* ========================================================= */}
+          {/* SECTION 2: PAYMENT INFO & QR CODE                         */}
+          {/* ========================================================= */}
+          <section id="sec-payments" className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 border border-teal-200 dark:border-teal-800">
+                <CreditCard className="w-4 h-4" />
               </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Payment Info & QR Code • بینک اور کیو آر
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Bank accounts, Raast ID, JazzCash and QR code on invoices
+                </p>
+              </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Meezan Bank / HBL"
+                    value={formData.bankName || ''}
+                    onChange={e => handleChange('bankName', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
                     Account Title
                   </label>
                   <input
                     type="text"
-                    value={formData.accountTitle}
+                    placeholder="e.g. ALI GARMENTS"
+                    value={formData.accountTitle || ''}
                     onChange={e => handleChange('accountTitle', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    Account Number
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.accountNumber}
-                    onChange={e => handleChange('accountNumber', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                  IBAN Number
+                  Account Number / IBAN
                 </label>
                 <input
                   type="text"
-                  placeholder="PK12MEZN000..."
-                  value={formData.iban}
-                  onChange={e => handleChange('iban', e.target.value)}
+                  placeholder="PK00MEZN0000000000000000"
+                  value={formData.accountNumber || ''}
+                  onChange={e => handleChange('accountNumber', e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    JazzCash Account
+                    Raast ID
                   </label>
                   <input
                     type="text"
-                    placeholder="0300-1234567"
-                    value={formData.jazzCash}
-                    onChange={e => handleChange('jazzCash', e.target.value)}
+                    placeholder="03354311792"
+                    value={formData.raastId || ''}
+                    onChange={e => handleChange('raastId', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
+
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                    EasyPaisa Account
+                    JazzCash / EasyPaisa Number
                   </label>
                   <input
                     type="text"
-                    placeholder="0321-7654321"
-                    value={formData.easyPaisa}
-                    onChange={e => handleChange('easyPaisa', e.target.value)}
+                    placeholder="03354311792"
+                    value={formData.jazzCash || ''}
+                    onChange={e => handleChange('jazzCash', e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
@@ -461,157 +530,34 @@ export default function SettingsModal({
                       type="file"
                       accept="image/*"
                       onChange={handleQrUpload}
-                      className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                      className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
                     />
                     <p className="text-[10px] text-slate-400">Raast / Bank / JazzCash QR code</p>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </section>
 
-          {/* TAB 4: BACKUP & EXPORT */}
-          {activeTab === 'backup' && (
-            <div className="space-y-4 text-xs">
-              {/* Last Backup Time Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 text-white shadow-lg space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-xs text-white uppercase tracking-wider">
-                        Backup Status & Timestamps
-                      </h4>
-                      <p className="text-[10px] text-slate-400">
-                        Tracks automated Cloud D1 snapshots & manual offline JSON exports
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={fetchCloudBackupInfo}
-                    disabled={backupInfo.isLoading}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 border border-slate-700/80 transition-all cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${backupInfo.isLoading ? 'animate-spin' : ''}`} />
-                    <span>{backupInfo.isLoading ? 'Checking...' : 'Refresh'}</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* Cloud D1 Backup Status */}
-                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
-                      ☁️ Cloud D1 Last Backup Time
-                    </span>
-                    <span className="text-xs font-mono font-bold text-emerald-400 block whitespace-nowrap">
-                      {backupInfo.cloudTime
-                        ? new Date(backupInfo.cloudTime).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })
-                        : 'No automated snapshot recorded'}
-                    </span>
-                    {backupInfo.cloudDetails && (
-                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5 truncate">
-                        {backupInfo.cloudDetails}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Local JSON Backup Status */}
-                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
-                      💾 Local JSON Last Export Time
-                    </span>
-                    <span className="text-xs font-mono font-bold text-teal-300 block whitespace-nowrap">
-                      {backupInfo.localTime
-                        ? new Date(backupInfo.localTime).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })
-                        : 'No offline export recorded yet'}
-                    </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Full system state preserved on disk
-                    </span>
-                  </div>
-                </div>
+          {/* ========================================================= */}
+          {/* SECTION 3: APP LOCK & PIN SECURITY                        */}
+          {/* ========================================================= */}
+          <section id="sec-applock" className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800">
+                <Lock className="w-4 h-4" />
               </div>
-
-              {/* One-Click Excel All Data */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="font-bold text-slate-900 dark:text-white">
-                    One-Click Complete Ledger Excel (.xlsx)
-                  </h4>
-                  <p className="text-slate-500 text-[11px]">
-                    Export all customer accounts, balances & timestamped transaction history into structured multi-tab Excel workbook.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onDownloadAllExcel}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-shrink-0"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Download XLS</span>
-                </button>
-              </div>
-
-              {/* JSON Backup Download */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="font-bold text-slate-900 dark:text-white">
-                    Full JSON System Backup
-                  </h4>
-                  <p className="text-slate-500 text-[11px]">
-                    Download an offline backup file containing all settings, customers, invoices and transactions.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDownloadBackup}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white flex-shrink-0"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export JSON</span>
-                </button>
-              </div>
-
-              {/* Restore JSON Backup */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2">
-                <h4 className="font-bold text-slate-900 dark:text-white">
-                  Restore from JSON Backup
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  App Lock & PIN Security • ایپ لاک سیکیورٹی
                 </h4>
-                <p className="text-slate-500 text-[11px]">
-                  Select a previous backup JSON file to restore your entire ledger and configuration.
+                <p className="text-[11px] text-slate-500">
+                  PIN security lock for Android APK & browser protection
                 </p>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleRestoreBackup}
-                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300"
-                />
               </div>
             </div>
-          )}
 
-          {/* TAB 5: APP LOCK (APK & Mobile Security) */}
-          {activeTab === 'app_lock' && (
-            <div className="space-y-4 text-xs">
-              <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 space-y-1.5">
-                <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200 font-bold">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <span>APK & Device Security • App Lock Protection</span>
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
-                  App Lock secures your ALI Garments Khata on this device. Whenever the app opens or resumes from background, a 4-digit PIN is required to unlock your accounts and customer ledgers.
-                </p>
-              </div>
-
+            <div className="space-y-3.5 text-xs">
               {appLockMsg.text && (
                 <div className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
                   appLockMsg.type === 'success'
@@ -635,11 +581,11 @@ export default function SettingsModal({
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-white">
-                      {appLockConfig.enabled ? 'App Lock is Active' : 'App Lock is Disabled'}
+                      {appLockConfig.enabled ? 'App Lock is Active (محفوظ)' : 'App Lock is Disabled'}
                     </h4>
                     <p className="text-slate-500 text-[11px]">
                       {appLockConfig.enabled
-                        ? 'Protected with 4-digit PIN on this phone / browser.'
+                        ? 'Protected with 4-digit PIN on this device.'
                         : 'Anyone with this device can open ledgers directly.'}
                     </p>
                   </div>
@@ -652,7 +598,7 @@ export default function SettingsModal({
                       onClose();
                       onTriggerAppLock();
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-xs"
                   >
                     Lock Now
                   </button>
@@ -731,7 +677,7 @@ export default function SettingsModal({
                             setIsChangingPin(false);
                             setAppLockMsg({ type: '', text: '' });
                           }}
-                          className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold"
+                          className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold cursor-pointer"
                         >
                           Cancel
                         </button>
@@ -740,15 +686,15 @@ export default function SettingsModal({
                         type="button"
                         onClick={() => {
                           if (isChangingPin && currentPinCheck !== appLockConfig.pin) {
-                            setAppLockMsg({ type: 'error', text: 'Current PIN is incorrect.' });
+                            setAppLockMsg({ type: 'error', text: 'Current PIN is incorrect' });
                             return;
                           }
                           if (newPin.length !== 4) {
-                            setAppLockMsg({ type: 'error', text: 'PIN must be exactly 4 numeric digits.' });
+                            setAppLockMsg({ type: 'error', text: 'PIN must be exactly 4 numeric digits' });
                             return;
                           }
                           if (newPin !== confirmPin) {
-                            setAppLockMsg({ type: 'error', text: 'New PIN and Confirm PIN do not match.' });
+                            setAppLockMsg({ type: 'error', text: 'New PIN and Confirm PIN do not match' });
                             return;
                           }
                           const updated = {
@@ -761,7 +707,7 @@ export default function SettingsModal({
                           setNewPin('');
                           setConfirmPin('');
                           setCurrentPinCheck('');
-                          setAppLockMsg({ type: 'success', text: 'App Lock PIN successfully saved and activated!' });
+                          setAppLockMsg({ type: 'success', text: 'App Lock PIN successfully saved and activated' });
                         }}
                         className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
                       >
@@ -775,7 +721,7 @@ export default function SettingsModal({
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-4">
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                      Auto-Lock Timeout When Leaving / Changing Tab
+                      Auto-Lock Timeout When Leaving Tab
                     </label>
                     <select
                       value={typeof appLockConfig.autoLockMinutes === 'number' ? appLockConfig.autoLockMinutes : 10}
@@ -785,7 +731,7 @@ export default function SettingsModal({
                           autoLockMinutes: Number(e.target.value),
                         };
                         onSaveAppLockConfig(updated);
-                        setAppLockMsg({ type: 'success', text: 'Auto-lock policy updated.' });
+                        setAppLockMsg({ type: 'success', text: 'Auto-lock policy updated' });
                       }}
                       className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-medium"
                     >
@@ -793,7 +739,7 @@ export default function SettingsModal({
                       <option value={5}>After 5 minutes away from tab</option>
                       <option value={15}>After 15 minutes away from tab</option>
                       <option value={30}>After 30 minutes away from tab</option>
-                      <option value={0}>Immediately when minimizing or leaving tab</option>
+                      <option value={0}>Immediately when leaving tab</option>
                     </select>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
                       Unlocked for unlimited time while you stay on this tab. If you switch tabs or leave for 10 minutes, you will be prompted for your PIN upon return.
@@ -807,18 +753,22 @@ export default function SettingsModal({
                         setIsChangingPin(true);
                         setAppLockMsg({ type: '', text: '' });
                       }}
-                      className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
                     >
                       Change 4-Digit PIN
                     </button>
 
+                    {/* Turn Off App Lock: Requires Consent Verification */}
                     <button
                       type="button"
                       onClick={() => {
-                        onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
-                        setAppLockMsg({ type: 'success', text: 'App Lock has been disabled.' });
+                        setConsentError('');
+                        setConsentPin('');
+                        setConsentPassword('');
+                        setConsentVerificationType('pin');
+                        setShowConsentModal(true);
                       }}
-                      className="px-3.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold"
+                      className="px-3.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold cursor-pointer transition-all active:scale-95"
                     >
                       Turn Off App Lock
                     </button>
@@ -826,25 +776,305 @@ export default function SettingsModal({
                 </div>
               )}
             </div>
-          )}
+          </section>
+
+          {/* ========================================================= */}
+          {/* SECTION 4: DATA BACKUP & EXPORT                           */}
+          {/* ========================================================= */}
+          <section id="sec-backup" className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 border border-indigo-200 dark:border-indigo-800">
+                <Download className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Data Backup & Excel Export • بیک اپ اور ایکسل
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Cloud D1 snapshots, Excel spreadsheets and offline JSON backups
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Last Backup Time Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 text-white shadow-lg space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-white uppercase tracking-wider">
+                        Backup Status & Timestamps
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Tracks automated Cloud D1 snapshots & offline JSON exports
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchCloudBackupInfo}
+                    disabled={backupInfo.isLoading}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 border border-slate-700/80 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${backupInfo.isLoading ? 'animate-spin' : ''}`} />
+                    <span>{backupInfo.isLoading ? 'Checking...' : 'Refresh'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Cloud D1 Backup Status */}
+                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                      ☁️ Cloud D1 Last Backup Time
+                    </span>
+                    <span className="text-xs font-mono font-bold text-emerald-400 block whitespace-nowrap">
+                      {backupInfo.cloudTime
+                        ? new Date(backupInfo.cloudTime).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'No automated snapshot recorded'}
+                    </span>
+                    {backupInfo.cloudDetails && (
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5 truncate">
+                        {backupInfo.cloudDetails}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Local JSON Backup Status */}
+                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                      💾 Local JSON Last Export Time
+                    </span>
+                    <span className="text-xs font-mono font-bold text-teal-300 block whitespace-nowrap">
+                      {backupInfo.localTime
+                        ? new Date(backupInfo.localTime).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'No offline export recorded yet'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Full system state preserved on disk
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* One-Click Excel All Data */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white">
+                    One-Click Complete Ledger Excel (.xlsx)
+                  </h4>
+                  <p className="text-slate-500 text-[11px]">
+                    Export all customer accounts, balances & timestamped transaction history into structured multi-tab Excel workbook.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onDownloadAllExcel}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-shrink-0 cursor-pointer active:scale-95 transition-all"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Download XLS</span>
+                </button>
+              </div>
+
+              {/* JSON Backup Download */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white">
+                    Full JSON System Backup
+                  </h4>
+                  <p className="text-slate-500 text-[11px]">
+                    Download an offline backup file containing all settings, customers, invoices and transactions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadBackup}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white flex-shrink-0 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export JSON</span>
+                </button>
+              </div>
+
+              {/* Restore JSON Backup */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2">
+                <h4 className="font-bold text-slate-900 dark:text-white">
+                  Restore from JSON Backup
+                </h4>
+                <p className="text-slate-500 text-[11px]">
+                  Select a previous backup JSON file to restore your entire ledger and configuration.
+                </p>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleRestoreBackup}
+                  className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer"
+                />
+              </div>
+            </div>
+          </section>
+
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 flex items-center justify-end gap-2">
+        {/* Modal Sticky Footer */}
+        <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/70 flex items-center justify-end gap-2 shrink-0">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSave}
-            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer"
           >
             Save Settings & Changes
           </button>
         </div>
       </div>
+
+      {/* ========================================================= */}
+      {/* CONSENT MODAL: REQUIRED TO REMOVE / DISABLE APP LOCK      */}
+      {/* ========================================================= */}
+      {showConsentModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 border border-rose-200 dark:border-rose-900">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Disable App Lock?
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Consent verification required
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConsentModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              To remove App Lock protection, please verify your identity using your current App Lock PIN or account password.
+            </p>
+
+            {/* Toggle Verification Type */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setConsentVerificationType('pin');
+                  setConsentError('');
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  consentVerificationType === 'pin'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    : 'text-slate-500'
+                }`}
+              >
+                Use Current PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConsentVerificationType('password');
+                  setConsentError('');
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  consentVerificationType === 'password'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    : 'text-slate-500'
+                }`}
+              >
+                Use Account Password
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifyConsentAndDisableAppLock} className="space-y-3 pt-1">
+              {consentVerificationType === 'pin' ? (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Enter Current 4-Digit PIN
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    autoFocus
+                    placeholder="••••"
+                    value={consentPin}
+                    onChange={e => setConsentPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-xl font-bold"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Enter Account Password
+                  </label>
+                  <input
+                    type="password"
+                    autoFocus
+                    placeholder="Account password"
+                    value={consentPassword}
+                    onChange={e => setConsentPassword(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                  />
+                </div>
+              )}
+
+              {consentError && (
+                <p className="text-xs text-rose-600 font-semibold flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{consentError}</span>
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConsentModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isVerifyingConsent}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all active:scale-95 shadow-md shadow-rose-600/25 flex items-center justify-center gap-1.5"
+                >
+                  {isVerifyingConsent ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <span>Confirm & Turn Off</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

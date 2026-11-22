@@ -935,7 +935,7 @@ export default function App() {
     setCustomers(updatedCustomers);
     setTransactionsMap(updatedTxMap);
     if (selectedCustomer?.id === customerId) {
-      setSelectedCustomer(updatedCustomers.length > 0 ? updatedCustomers[0] : null);
+      setSelectedCustomer(null);
     }
 
     await saveCustomers(updatedCustomers);
@@ -1088,6 +1088,25 @@ export default function App() {
     return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
+  // Secure App Lock Check: If App Lock is active and locked, IMMEDIATELY show AppLockScreen!
+  // Prevents the dashboard, stats, and party cards from ever flashing before PIN entry!
+  if (appLockConfig.enabled && isAppLocked) {
+    return (
+      <AppLockScreen
+        isLocked={true}
+        onUnlock={() => {
+          setIsAppLocked(false);
+          setSelectedCustomer(null); // Never default to 4 Season G9 or any single party on unlock!
+          sessionStorage.setItem('ag_app_unlocked', 'true');
+          sessionStorage.removeItem('ag_tab_hidden_time');
+          localStorage.removeItem('ag_tab_hidden_time');
+        }}
+        configuredPin={appLockConfig.pin}
+        currentUser={currentUser}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Splash Screen */}
@@ -1190,8 +1209,12 @@ export default function App() {
             />
           </div>
 
-          {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg) */}
-          <div className={`lg:col-span-7 flex flex-col min-h-[calc(100vh-200px)] lg:h-[calc(100vh-270px)] lg:min-h-[600px] ${selectedCustomer ? 'block' : 'hidden lg:block'}`}>
+          {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg; Fixed full-screen on mobile so bottom action buttons are always pinned) */}
+          <div className={`lg:col-span-7 flex flex-col ${
+            selectedCustomer
+              ? 'fixed inset-0 z-40 bg-white dark:bg-slate-900 lg:static lg:z-auto lg:h-[calc(100vh-270px)] lg:min-h-[600px]'
+              : 'hidden lg:block lg:h-[calc(100vh-270px)] lg:min-h-[600px]'
+          }`}>
             {selectedCustomer ? (
               <CustomerDetail
                 customer={selectedCustomer}
@@ -1293,6 +1316,7 @@ export default function App() {
         appLockConfig={appLockConfig}
         onSaveAppLockConfig={handleSaveAppLockConfig}
         onTriggerAppLock={() => setIsAppLocked(true)}
+        currentUser={currentUser}
       />
 
       {/* 5. Recycle Bin Modal (30-Day Auto Retention & Multi-Device Sync) */}
@@ -1601,6 +1625,7 @@ export default function App() {
         isLocked={isAppLocked}
         onUnlock={() => {
           setIsAppLocked(false);
+          setSelectedCustomer(null);
           sessionStorage.setItem('ag_app_unlocked', 'true');
           sessionStorage.removeItem('ag_tab_hidden_time');
           localStorage.removeItem('ag_tab_hidden_time');
