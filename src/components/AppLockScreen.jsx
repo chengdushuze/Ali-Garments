@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Unlock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X, Clock } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
+import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
 
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_STORAGE_KEY = 'ag_app_lock_lockout_until';
-const ATTEMPTS_STORAGE_KEY = 'ag_app_lock_failed_attempts';
+const PIN_RATE_LIMIT_KEY = 'app_lock_pin';
+const FORGOT_PW_RATE_LIMIT_KEY = 'app_lock_forgot_pw';
 
 export default function AppLockScreen({
   isLocked,
@@ -22,25 +22,24 @@ export default function AppLockScreen({
   const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [fallbackError, setFallbackError] = useState('');
 
-  // Android-style Rate Limiting & Lockout Countdown
-  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
+  // Rate Limiting & Lockout Countdown states
+  const [pinLockoutSeconds, setPinLockoutSeconds] = useState(0);
+  const [pwLockoutSeconds, setPwLockoutSeconds] = useState(0);
 
-  // Check lockout on mount & state change
+  // Check rate limiting on mount & every second
   useEffect(() => {
-    const checkLockout = () => {
-      try {
-        const storedLockout = Number(sessionStorage.getItem(LOCKOUT_STORAGE_KEY) || 0);
-        const remaining = Math.max(0, Math.ceil((storedLockout - Date.now()) / 1000));
-        setLockoutSecondsLeft(remaining);
-      } catch (e) {
-        setLockoutSecondsLeft(0);
-      }
+    const updateRateLimits = () => {
+      const pinStatus = getRateLimitStatus(PIN_RATE_LIMIT_KEY, 5);
+      setPinLockoutSeconds(pinStatus.secondsLeft);
+
+      const pwStatus = getRateLimitStatus(FORGOT_PW_RATE_LIMIT_KEY, 5);
+      setPwLockoutSeconds(pwStatus.secondsLeft);
     };
 
-    checkLockout();
-    const interval = setInterval(checkLockout, 1000);
-    return () => clearInterval(interval);
-  }, [isLocked]);
+    updateRateLimits();
+    const timer = setInterval(updateRateLimits, 1000);
+    return () => clearInterval(timer);
+  }, [isLocked, showPasswordFallback]);
 
   // Reset state when locked status changes
   useEffect(() => {
@@ -55,7 +54,7 @@ export default function AppLockScreen({
 
   // Support physical keyboard typing
   useEffect(() => {
-    if (!isLocked || showPasswordFallback || lockoutSecondsLeft > 0) return;
+    if (!isLocked || showPasswordFallback || pinLockoutSeconds > 0) return;
 
     const handleKeyDown = (e) => {
       if (e.key >= '0' && e.key <= '9') {
@@ -67,7 +66,7 @@ export default function AppLockScreen({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLocked, enteredPin, showPasswordFallback, lockoutSecondsLeft]);
+  }, [isLocked, enteredPin, showPasswordFallback, pinLockoutSeconds]);
 
   if (!isLocked) return null;
 
@@ -80,7 +79,9 @@ export default function AppLockScreen({
   };
 
   const triggerError = (msg) => {
-    setErrorMessage(msg);
+    // Enforce zero dots in authentication messages
+    const cleanMsg = (msg || '').replace(/\./g, '');
+    setErrorMessage(cleanMsg);
     setIsShaking(true);
     setEnteredPin('');
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -93,28 +94,8 @@ export default function AppLockScreen({
     }, 600);
   };
 
-  const recordFailedAttempt = () => {
-    try {
-      const currentAttempts = Number(sessionStorage.getItem(ATTEMPTS_STORAGE_KEY) || 0) + 1;
-      sessionStorage.setItem(ATTEMPTS_STORAGE_KEY, String(currentAttempts));
-
-      if (currentAttempts >= MAX_FAILED_ATTEMPTS) {
-        const lockoutDuration = currentAttempts >= 8 ? 60 : 30; // 30s or 60s
-        const lockoutUntil = Date.now() + lockoutDuration * 1000;
-        sessionStorage.setItem(LOCKOUT_STORAGE_KEY, String(lockoutUntil));
-        setLockoutSecondsLeft(lockoutDuration);
-        triggerError(`Too many incorrect attempts. App locked for ${lockoutDuration} seconds.`);
-      } else {
-        const remaining = MAX_FAILED_ATTEMPTS - currentAttempts;
-        triggerError(`Incorrect PIN. ${remaining} attempt${remaining > 1 ? 's' : ''} remaining.`);
-      }
-    } catch (e) {
-      triggerError('Incorrect PIN. Please try again.');
-    }
-  };
-
   const handleDigit = (digit) => {
-    if (lockoutSecondsLeft > 0) return;
+    if (pinLockoutSeconds > 0) return;
     triggerHaptic();
 
     if (enteredPin.length >= 4) return;
@@ -123,43 +104,43 @@ export default function AppLockScreen({
     setErrorMessage('');
 
     if (nextPin.length === 4) {
-      // Validate PIN
       if (nextPin === configuredPin) {
         setIsUnlockSuccess(true);
-        // Clear failed attempts upon success
-        try {
-          sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
-          sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
-        } catch (e) {}
+        resetRateLimit(PIN_RATE_LIMIT_KEY);
+        resetRateLimit(FORGOT_PW_RATE_LIMIT_KEY);
         setTimeout(() => {
           onUnlock();
           setIsUnlockSuccess(false);
         }, 650);
       } else {
-        recordFailedAttempt();
+        const res = recordRateLimitFailure(PIN_RATE_LIMIT_KEY, 5, 30);
+        setPinLockoutSeconds(res.secondsLeft);
+        triggerError(res.errorMessage);
       }
     }
   };
 
   const handleBackspace = () => {
-    if (lockoutSecondsLeft > 0) return;
+    if (pinLockoutSeconds > 0) return;
     triggerHaptic();
     setEnteredPin(prev => prev.slice(0, -1));
     setErrorMessage('');
   };
 
   const handleClear = () => {
-    if (lockoutSecondsLeft > 0) return;
+    if (pinLockoutSeconds > 0) return;
     triggerHaptic();
     setEnteredPin('');
     setErrorMessage('');
   };
 
-  // Fallback unlock via account password
+  // Fallback unlock via account password with rate limiting
   const handlePasswordUnlock = async (e) => {
     e.preventDefault();
+    if (pwLockoutSeconds > 0) return;
+
     if (!accountPassword) {
-      setFallbackError('Please enter your account password.');
+      setFallbackError('Please enter your account password');
       return;
     }
 
@@ -179,25 +160,28 @@ export default function AppLockScreen({
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setIsUnlockSuccess(true);
-        try {
-          sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
-          sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
-        } catch (e) {}
+        resetRateLimit(PIN_RATE_LIMIT_KEY);
+        resetRateLimit(FORGOT_PW_RATE_LIMIT_KEY);
         setTimeout(() => {
           onUnlock();
           setIsUnlockSuccess(false);
         }, 650);
       } else {
-        setFallbackError(data.error || 'Incorrect account password.');
+        const rl = recordRateLimitFailure(FORGOT_PW_RATE_LIMIT_KEY, 5, 30);
+        setPwLockoutSeconds(rl.secondsLeft);
+        const errText = rl.isLocked
+          ? rl.errorMessage
+          : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
+        setFallbackError(errText);
       }
     } catch (err) {
-      setFallbackError('Verification failed. Check network connection.');
+      setFallbackError('Verification failed Please check network connection');
     } finally {
       setIsVerifyingPassword(false);
     }
   };
 
-  const isLockedOut = lockoutSecondsLeft > 0;
+  const isLockedOut = pinLockoutSeconds > 0;
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none animate-in fade-in duration-300">
@@ -398,14 +382,24 @@ export default function AppLockScreen({
               Enter your account password for <strong className="text-slate-200">{currentUser?.email || 'this session'}</strong> to unlock:
             </p>
 
+            {pwLockoutSeconds > 0 && (
+              <div className="mb-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-xs text-rose-300 font-semibold animate-pulse">
+                <Clock className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Too many attempts Locked for {pwLockoutSeconds}s</span>
+              </div>
+            )}
+
             <form onSubmit={handlePasswordUnlock} className="space-y-3">
               <div className="relative">
                 <input
                   type={showAccountPassword ? 'text' : 'password'}
                   value={accountPassword}
                   onChange={(e) => setAccountPassword(e.target.value)}
+                  disabled={pwLockoutSeconds > 0 || isVerifyingPassword}
                   placeholder="Enter account password..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500 ${
+                    pwLockoutSeconds > 0 ? 'border-rose-500/50 opacity-60 cursor-not-allowed' : 'border-slate-700'
+                  }`}
                   autoFocus
                 />
                 <button
@@ -433,10 +427,14 @@ export default function AppLockScreen({
                 </button>
                 <button
                   type="submit"
-                  disabled={isVerifyingPassword}
-                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={isVerifyingPassword || pwLockoutSeconds > 0}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all flex items-center justify-center gap-1.5 ${
+                    pwLockoutSeconds > 0
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:scale-95 cursor-pointer'
+                  }`}
                 >
-                  {isVerifyingPassword ? 'Verifying...' : 'Unlock App'}
+                  {isVerifyingPassword ? 'Verifying...' : pwLockoutSeconds > 0 ? `Locked (${pwLockoutSeconds}s)` : 'Unlock App'}
                 </button>
               </div>
             </form>

@@ -31,6 +31,10 @@ import {
   Save
 } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
+import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
+
+const ADMIN_GATE_RL_KEY = 'admin_panel_gate';
+const ADMIN_DELETE_USER_RL_KEY = 'admin_delete_user';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [adminTab, setAdminTab] = useState('users'); // 'users', 'audit', 'backup'
@@ -50,6 +54,19 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [showGatePassword, setShowGatePassword] = useState(false);
   const [isVerifyingGate, setIsVerifyingGate] = useState(false);
   const [gateError, setGateError] = useState('');
+  const [gateLockoutSeconds, setGateLockoutSeconds] = useState(0);
+
+  // Monitor Gate Rate Limit
+  useEffect(() => {
+    if (!isOpen || isGateUnlocked) return;
+    const updateGateRateLimit = () => {
+      const status = getRateLimitStatus(ADMIN_GATE_RL_KEY, 5);
+      setGateLockoutSeconds(status.secondsLeft);
+    };
+    updateGateRateLimit();
+    const interval = setInterval(updateGateRateLimit, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, isGateUnlocked]);
 
   // Role Change Modal state (Website own popup - Zero Chrome popups!)
   const [roleChangeTarget, setRoleChangeTarget] = useState(null); // { user, targetRole }
@@ -263,8 +280,10 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
   const handleUnlockAdminGate = async (e) => {
     e.preventDefault();
+    if (gateLockoutSeconds > 0) return;
+
     if (!gatePassword) {
-      setGateError('Please enter your administrator password.');
+      setGateError('Please enter your administrator password');
       return;
     }
 
@@ -283,16 +302,22 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        setGateError(data.error || 'Incorrect administrator password. Access denied.');
+        const rl = recordRateLimitFailure(ADMIN_GATE_RL_KEY, 5, 30);
+        setGateLockoutSeconds(rl.secondsLeft);
+        const errText = rl.isLocked
+          ? rl.errorMessage
+          : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
+        setGateError(errText);
         return;
       }
 
+      resetRateLimit(ADMIN_GATE_RL_KEY);
       setIsGateUnlocked(true);
       setGatePassword('');
       fetchUsers();
       fetchBackupInfo();
     } catch (err) {
-      setGateError('Network connection error during verification. Please try again.');
+      setGateError('Network connection error during verification Please try again');
     } finally {
       setIsVerifyingGate(false);
     }
@@ -927,6 +952,13 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
               </span>
             </div>
 
+            {gateLockoutSeconds > 0 && (
+              <div className="w-full p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center gap-2 text-xs text-rose-300 font-semibold animate-pulse">
+                <Clock className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Security Lockout: Try again in {gateLockoutSeconds}s</span>
+              </div>
+            )}
+
             <form onSubmit={handleUnlockAdminGate} className="w-full space-y-4">
               <div className="text-left">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
@@ -936,12 +968,15 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                   <input
                     type={showGatePassword ? 'text' : 'password'}
                     value={gatePassword}
+                    disabled={gateLockoutSeconds > 0 || isVerifyingGate}
                     onChange={e => {
                       setGatePassword(e.target.value);
                       setGateError('');
                     }}
                     placeholder="Enter your account password..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border text-white text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium ${
+                      gateLockoutSeconds > 0 ? 'border-rose-500/50 opacity-60 cursor-not-allowed' : 'border-slate-700'
+                    }`}
                     autoFocus
                   />
                   <button
@@ -970,7 +1005,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={isVerifyingGate}
+                  disabled={isVerifyingGate || gateLockoutSeconds > 0}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   {isVerifyingGate ? (
@@ -978,6 +1013,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       <span>Verifying...</span>
                     </>
+                  ) : gateLockoutSeconds > 0 ? (
+                    <span>Locked ({gateLockoutSeconds}s)</span>
                   ) : (
                     <>
                       <Lock className="w-3.5 h-3.5" />

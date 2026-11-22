@@ -12,10 +12,25 @@
   html {
     color-scheme: light dark;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   body {
     -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
+    touch-action: manipulation;
+  }
+  /* Instant 0ms Android Touch Response - Eliminates 300ms Mobile Click Delay */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  label {
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+    user-select: none;
+    -webkit-user-select: none;
   }
 }
 

@@ -42,12 +42,22 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public boolean saveExcelToDownloads(String fileName, String base64Data) {
+            if (fileName == null || base64Data == null || base64Data.isEmpty()) {
+                return false;
+            }
+
             try {
+                // Sanitize file name to prevent any path traversal
+                String safeName = new File(fileName).getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+                if (!safeName.toLowerCase().endsWith(".xlsx")) {
+                    safeName += ".xlsx";
+                }
+
                 byte[] fileBytes = Base64.decode(base64Data, Base64.DEFAULT);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
-                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, safeName);
                     values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                     values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
 
@@ -61,19 +71,20 @@ public class MainActivity extends BridgeActivity {
                         }
                     }
                 } else {
-                    File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                    if (!downloadsDir.exists()) {
-                        downloadsDir.mkdirs();
+                    File appFilesDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    if (appFilesDir != null && !appFilesDir.exists()) {
+                        appFilesDir.mkdirs();
                     }
-                    File outFile = new File(downloadsDir, fileName);
+                    File outFile = new File(appFilesDir != null ? appFilesDir : context.getFilesDir(), safeName);
                     try (FileOutputStream fos = new FileOutputStream(outFile)) {
                         fos.write(fileBytes);
                         fos.flush();
                     }
                 }
 
+                final String finalFileName = safeName;
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    Toast.makeText(context, "Saved to Downloads folder: " + fileName, Toast.LENGTH_LONG).show();
+                    Toast.makeText(context, "Saved: " + finalFileName, Toast.LENGTH_SHORT).show();
                 });
                 return true;
             } catch (Exception e) {

@@ -25,6 +25,9 @@ import {
 } from 'lucide-react';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
 import { apiFetch } from '../services/apiClient';
+import { getRateLimitStatus, recordRateLimitFailure, resetRateLimit } from '../services/rateLimiter';
+
+const SETTINGS_CONSENT_RL_KEY = 'settings_consent_verify';
 
 export default function SettingsModal({
   isOpen,
@@ -97,6 +100,19 @@ export default function SettingsModal({
   const [consentPassword, setConsentPassword] = useState('');
   const [consentError, setConsentError] = useState('');
   const [isVerifyingConsent, setIsVerifyingConsent] = useState(false);
+  const [consentLockoutSeconds, setConsentLockoutSeconds] = useState(0);
+
+  // Monitor consent rate limit
+  useEffect(() => {
+    if (!showConsentModal) return;
+    const updateConsentRateLimit = () => {
+      const status = getRateLimitStatus(SETTINGS_CONSENT_RL_KEY, 5);
+      setConsentLockoutSeconds(status.secondsLeft);
+    };
+    updateConsentRateLimit();
+    const timer = setInterval(updateConsentRateLimit, 1000);
+    return () => clearInterval(timer);
+  }, [showConsentModal]);
 
   const [backupInfo, setBackupInfo] = useState({
     cloudTime: null,
@@ -224,9 +240,10 @@ export default function SettingsModal({
     reader.readAsText(file);
   };
 
-  // Verify Consent to Disable App Lock
+  // Verify Consent to Disable App Lock with Rate Limiting
   const handleVerifyConsentAndDisableAppLock = async (e) => {
     e.preventDefault();
+    if (consentLockoutSeconds > 0) return;
     setConsentError('');
 
     if (consentVerificationType === 'pin') {
@@ -235,10 +252,13 @@ export default function SettingsModal({
         return;
       }
       if (consentPin !== appLockConfig.pin) {
-        setConsentError('Current PIN is incorrect');
+        const rl = recordRateLimitFailure(SETTINGS_CONSENT_RL_KEY, 5, 30);
+        setConsentLockoutSeconds(rl.secondsLeft);
+        setConsentError(rl.errorMessage);
         return;
       }
       // Verified with current PIN
+      resetRateLimit(SETTINGS_CONSENT_RL_KEY);
       onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
       setShowConsentModal(false);
       setConsentPin('');
@@ -264,16 +284,22 @@ export default function SettingsModal({
 
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success) {
+          resetRateLimit(SETTINGS_CONSENT_RL_KEY);
           onSaveAppLockConfig({ enabled: false, pin: '', autoLockMinutes: 0 });
           setShowConsentModal(false);
           setConsentPin('');
           setConsentPassword('');
           setAppLockMsg({ type: 'success', text: 'App Lock has been successfully disabled' });
         } else {
-          setConsentError(data.error || 'Incorrect account password');
+          const rl = recordRateLimitFailure(SETTINGS_CONSENT_RL_KEY, 5, 30);
+          setConsentLockoutSeconds(rl.secondsLeft);
+          const errText = rl.isLocked
+            ? rl.errorMessage
+            : (data.error ? String(data.error).replace(/\./g, '') : rl.errorMessage);
+          setConsentError(errText);
         }
       } catch (err) {
-        setConsentError('Verification failed. Check network connection');
+        setConsentError('Verification failed Check network connection');
       } finally {
         setIsVerifyingConsent(false);
       }
@@ -1100,6 +1126,13 @@ export default function SettingsModal({
               </button>
             </div>
 
+            {consentLockoutSeconds > 0 && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center gap-2 text-xs text-rose-500 font-semibold animate-pulse">
+                <Clock className="w-4 h-4 shrink-0" />
+                <span>Security Lockout: Try again in {consentLockoutSeconds}s</span>
+              </div>
+            )}
+
             <form onSubmit={handleVerifyConsentAndDisableAppLock} className="space-y-3 pt-1">
               {consentVerificationType === 'pin' ? (
                 <div>
@@ -1109,11 +1142,12 @@ export default function SettingsModal({
                   <input
                     type="password"
                     maxLength={4}
+                    disabled={consentLockoutSeconds > 0 || isVerifyingConsent}
                     autoFocus
                     placeholder="••••"
                     value={consentPin}
                     onChange={e => setConsentPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-xl font-bold"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono tracking-widest text-center text-xl font-bold disabled:opacity-50"
                   />
                 </div>
               ) : (
@@ -1123,11 +1157,12 @@ export default function SettingsModal({
                   </label>
                   <input
                     type="password"
+                    disabled={consentLockoutSeconds > 0 || isVerifyingConsent}
                     autoFocus
                     placeholder="Account password"
                     value={consentPassword}
                     onChange={e => setConsentPassword(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs disabled:opacity-50"
                   />
                 </div>
               )}
@@ -1149,14 +1184,16 @@ export default function SettingsModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isVerifyingConsent}
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all active:scale-95 shadow-md shadow-rose-600/25 flex items-center justify-center gap-1.5"
+                  disabled={isVerifyingConsent || consentLockoutSeconds > 0}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all active:scale-95 shadow-md shadow-rose-600/25 flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {isVerifyingConsent ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       <span>Verifying...</span>
                     </>
+                  ) : consentLockoutSeconds > 0 ? (
+                    <span>Locked ({consentLockoutSeconds}s)</span>
                   ) : (
                     <span>Confirm & Turn Off</span>
                   )}
