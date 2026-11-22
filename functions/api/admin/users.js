@@ -511,6 +511,11 @@ export async function onRequestPatch(context) {
         await env.DB.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 1) + 1, password_plain = NULL WHERE id = ?')
           .bind(passwordHash, id)
           .run();
+
+        const targetUser = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(id).first().catch(() => null);
+        if (targetUser?.email) {
+          await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ?').bind(targetUser.email.toLowerCase()).run().catch(() => {});
+        }
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
         await fetch(endpoint, {
@@ -554,6 +559,13 @@ export async function onRequestPatch(context) {
         await env.DB.prepare('UPDATE users SET status = ?, suspended_until = ?, suspension_reason = ?, token_version = COALESCE(token_version, 1) + 1 WHERE id = ?')
           .bind(safeStatus, suspendedUntil, finalReason, id)
           .run();
+
+        if (safeStatus === 'active') {
+          const targetUser = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(id).first().catch(() => null);
+          if (targetUser?.email) {
+            await env.DB.prepare('DELETE FROM login_attempts WHERE identifier = ?').bind(targetUser.email.toLowerCase()).run().catch(() => {});
+          }
+        }
       } else if (env.CF_ACCOUNT_ID && env.CF_DATABASE_ID && env.CF_API_TOKEN) {
         const endpoint = `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/d1/database/${env.CF_DATABASE_ID}/query`;
         await fetch(endpoint, {

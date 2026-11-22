@@ -7,7 +7,8 @@ import {
   resetRateLimit,
   checkAccountPasswordRateLimit,
   recordAccountPasswordFailure,
-  resetAccountPasswordRateLimit
+  resetAccountPasswordRateLimit,
+  formatSecondsToTimer
 } from '../services/rateLimiter';
 
 const PIN_RATE_LIMIT_KEY = 'app_lock_pin';
@@ -280,7 +281,7 @@ export default function AppLockScreen({
               {isLockedOut ? (
                 <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5 animate-pulse bg-rose-950/50 border border-rose-800/60 px-3 py-1 rounded-full">
                   <Clock className="w-3.5 h-3.5 shrink-0" />
-                  <span>Too many attempts. Try again in {lockoutSecondsLeft}s</span>
+                  <span>Too many attempts Try again in {formatSecondsToTimer(pinLockoutSeconds)}</span>
                 </span>
               ) : errorMessage ? (
                 <span className="text-xs font-semibold text-rose-400 flex items-center gap-1 animate-in fade-in">
@@ -402,7 +403,7 @@ export default function AppLockScreen({
             {pwLockoutSeconds > 0 && (
               <div className="mb-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-xs text-rose-300 font-semibold animate-pulse">
                 <Clock className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>Too many attempts Locked for {pwLockoutSeconds}s</span>
+                <span>Too many failed attempts (3 maximum) Locked for {formatSecondsToTimer(pwLockoutSeconds)}</span>
               </div>
             )}
 
@@ -451,7 +452,7 @@ export default function AppLockScreen({
                       : 'bg-emerald-600 hover:bg-emerald-500 active:scale-95 cursor-pointer'
                   }`}
                 >
-                  {isVerifyingPassword ? 'Verifying...' : pwLockoutSeconds > 0 ? `Locked (${pwLockoutSeconds}s)` : 'Unlock App'}
+                  {isVerifyingPassword ? 'Verifying...' : pwLockoutSeconds > 0 ? `Locked (${formatSecondsToTimer(pwLockoutSeconds)})` : 'Unlock App'}
                 </button>
               </div>
             </form>

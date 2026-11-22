@@ -364,10 +364,15 @@ export async function onRequestPost(context) {
         const untilMsg = remainingDays ? ` for ${remainingDays} more day(s)` : '';
         const defaultReason = 'We suspected unusual activity on your account';
         const reason = (user.suspension_reason?.trim() || defaultReason).replace(/\./g, '');
+        let errMsg = `Your account has been temporarily suspended by an administrator${untilMsg}\nReason: ${reason}`;
+        if (reason.toLowerCase().includes('unusual failed password attempts') || reason.toLowerCase().includes('failed password attempts')) {
+          errMsg = 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator';
+        }
         return new Response(
           JSON.stringify({
-            error: `Your account has been temporarily suspended by an administrator${untilMsg}\nReason: ${reason}`,
+            error: errMsg,
             isSuspended: true,
+            autoSuspended: reason.toLowerCase().includes('failed password attempts'),
             reason: reason,
             suspendedDays: remainingDays,
             suspendedUntil: user.suspended_until,

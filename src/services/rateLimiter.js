@@ -30,6 +30,18 @@ function getLocalStore() {
 }
 
 /**
+ * Formats seconds into MM:SS live countdown string (e.g. 14:59, 05:20)
+ * @param {number} totalSeconds
+ * @returns {string}
+ */
+export function formatSecondsToTimer(totalSeconds) {
+  const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+/**
  * Checks rate limit and suspension status for account password.
  * @param {string} identifier e.g. email or action key
  * @returns {{ isSuspended: boolean, isLocked: boolean, secondsLeft: number, attemptsLeft: number, totalFailures: number }}
@@ -47,7 +59,7 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
   if (isSuspendedLocally || totalFailures >= PASSWORD_AUTO_SUSPEND_THRESHOLD) {
     return {
       isSuspended: true,
-      isLocked: true,
+      isLocked: false,
       secondsLeft: 0,
       attemptsLeft: 0,
       totalFailures,
@@ -69,7 +81,7 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
       minutesLeft,
       attemptsLeft: 0,
       totalFailures,
-      errorMessage: `Too many failed password attempts (3 maximum) Access is locked for ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''}`
+      errorMessage: `Too many failed password attempts (3 maximum) Access is locked for ${formatSecondsToTimer(secondsLeft)}`
     };
   }
 
@@ -111,13 +123,17 @@ export function recordAccountPasswordFailure(identifier = 'account_password', em
   // Check 6-try Auto-Suspension Threshold
   if (totalFailures >= PASSWORD_AUTO_SUSPEND_THRESHOLD) {
     local?.setItem(STORAGE_PREFIX_SUSPENDED + key, 'true');
+    local?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
+    session?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
     if (emailKey !== key) {
       local?.setItem(STORAGE_PREFIX_SUSPENDED + emailKey, 'true');
+      local?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
+      session?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
     }
 
     return {
       isSuspended: true,
-      isLocked: true,
+      isLocked: false,
       secondsLeft: 0,
       attemptsLeft: 0,
       totalFailures,
@@ -175,12 +191,14 @@ export function resetAccountPasswordRateLimit(identifier = 'account_password', e
   session?.removeItem(STORAGE_PREFIX_LOCKOUT + key);
   session?.removeItem(STORAGE_PREFIX_ATTEMPTS + key);
   local?.removeItem(STORAGE_PREFIX_TOTAL_FAILURES + key);
+  local?.removeItem(STORAGE_PREFIX_SUSPENDED + key);
 
   if (emailKey !== key) {
     local?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
     session?.removeItem(STORAGE_PREFIX_LOCKOUT + emailKey);
     session?.removeItem(STORAGE_PREFIX_ATTEMPTS + emailKey);
     local?.removeItem(STORAGE_PREFIX_TOTAL_FAILURES + emailKey);
+    local?.removeItem(STORAGE_PREFIX_SUSPENDED + emailKey);
   }
 }
 

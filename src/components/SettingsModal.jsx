@@ -31,7 +31,8 @@ import {
   resetRateLimit,
   checkAccountPasswordRateLimit,
   recordAccountPasswordFailure,
-  resetAccountPasswordRateLimit
+  resetAccountPasswordRateLimit,
+  formatSecondsToTimer
 } from '../services/rateLimiter';
 
 const SETTINGS_CONSENT_RL_KEY = 'settings_consent_verify';
@@ -1149,7 +1150,7 @@ export default function SettingsModal({
             {consentLockoutSeconds > 0 && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center gap-2 text-xs text-rose-500 font-semibold animate-pulse">
                 <Clock className="w-4 h-4 shrink-0" />
-                <span>Security Lockout: Try again in {consentLockoutSeconds}s</span>
+                <span>Security Lockout: Try again in {formatSecondsToTimer(consentLockoutSeconds)}</span>
               </div>
             )}
 
@@ -1213,7 +1214,7 @@ export default function SettingsModal({
                       <span>Verifying...</span>
                     </>
                   ) : consentLockoutSeconds > 0 ? (
-                    <span>Locked ({consentLockoutSeconds}s)</span>
+                    <span>Locked ({formatSecondsToTimer(consentLockoutSeconds)})</span>
                   ) : (
                     <span>Confirm & Turn Off</span>
                   )}

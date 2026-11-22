@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
-import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, CheckCircle2, Clock } from 'lucide-react';
 import { getCachedAuthUser, setCachedAuthUser } from '../services/storage';
 import { apiFetch, setStoredToken } from '../services/apiClient';
-import { checkAccountPasswordRateLimit, recordAccountPasswordFailure, resetAccountPasswordRateLimit } from '../services/rateLimiter';
+import {
+  checkAccountPasswordRateLimit,
+  recordAccountPasswordFailure,
+  resetAccountPasswordRateLimit,
+  formatSecondsToTimer
+} from '../services/rateLimiter';
 
 export default function LoginView({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -11,6 +16,36 @@ export default function LoginView({ onLoginSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [loginSuccessUser, setLoginSuccessUser] = useState(null);
+
+  // Rate Limiting & Auto-Suspension Live Cache States
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0);
+  const [isAutoSuspended, setIsAutoSuspended] = useState(false);
+
+  // Live countdown timer check (ticking every 1s from cache)
+  useEffect(() => {
+    const updateRateLimitCache = () => {
+      const cleanEmail = email.trim().toLowerCase();
+      const lastEmail = typeof window !== 'undefined' ? (window.localStorage?.getItem('ag_rl_last_email') || '') : '';
+      const targetIdentifier = cleanEmail || lastEmail || 'account_password';
+
+      const status = checkAccountPasswordRateLimit(targetIdentifier);
+
+      if (status.isSuspended) {
+        setIsAutoSuspended(true);
+        setLockoutSecondsLeft(0);
+      } else if (status.isLocked && status.secondsLeft > 0) {
+        setLockoutSecondsLeft(status.secondsLeft);
+        setIsAutoSuspended(false);
+      } else {
+        setLockoutSecondsLeft(0);
+        setIsAutoSuspended(false);
+      }
+    };
+
+    updateRateLimitCache();
+    const timer = setInterval(updateRateLimitCache, 1000);
+    return () => clearInterval(timer);
+  }, [email]);
 
   const triggerSuccessAnimation = (user) => {
     setLoginSuccessUser(user);
@@ -32,17 +67,17 @@ export default function LoginView({ onLoginSuccess }) {
       return;
     }
 
-    // Check client-side rate limit & suspension status for this email
+    // 1. Client-Side Cache Lockout: 3 wrong passwords -> 15-minute lock
+    // Prevents sending any request to the server (Worker or D1)
     const rlStatus = checkAccountPasswordRateLimit(cleanEmail);
-    if (rlStatus.isSuspended) {
-      setErrorMessage(rlStatus.errorMessage);
-      return;
-    }
-    if (rlStatus.isLocked) {
-      setErrorMessage(rlStatus.errorMessage);
-      return;
+    if (rlStatus.isLocked && rlStatus.secondsLeft > 0) {
+      setLockoutSecondsLeft(rlStatus.secondsLeft);
+      setErrorMessage(`Too many failed password attempts (3 maximum) For your security login is locked for ${formatSecondsToTimer(rlStatus.secondsLeft)}`);
+      return; // STOP! No network request sent to server
     }
 
+    // 2. Note: If 6 failed attempts done and user suspended, rlStatus.isLocked is false
+    // The login screen allows sending the request to the server so user can attempt login / authorized access
     setIsLoading(true);
 
     try {
@@ -76,7 +111,9 @@ export default function LoginView({ onLoginSuccess }) {
         } else {
           // If 403 Auto-Suspended or Administrator Suspended
           if (data.isSuspended || response.status === 403) {
-            recordAccountPasswordFailure(cleanEmail, cleanEmail);
+            const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
+            setIsAutoSuspended(true);
+            setLockoutSecondsLeft(0);
             const rawMsg = data.error || 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator';
             setErrorMessage(rawMsg.replace(/\./g, ''));
             setIsLoading(false);
@@ -85,7 +122,10 @@ export default function LoginView({ onLoginSuccess }) {
 
           // If 429 Rate limited (3 attempts / 15 minutes)
           if (response.status === 429 || data.isRateLimited) {
-            const rawMsg = data.error || 'Too many failed login attempts (3 maximum) For your security login is locked for 15 minutes';
+            const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
+            const seconds = rl.secondsLeft || 900;
+            setLockoutSecondsLeft(seconds);
+            const rawMsg = `Too many failed password attempts (3 maximum) For your security login is locked for ${formatSecondsToTimer(seconds)}`;
             setErrorMessage(rawMsg.replace(/\./g, ''));
             setIsLoading(false);
             return;
@@ -93,10 +133,16 @@ export default function LoginView({ onLoginSuccess }) {
 
           // Failed credentials (401 or other) - record client failure toward 3-lock / 6-suspend
           const rl = recordAccountPasswordFailure(cleanEmail, cleanEmail);
+          if (rl.isSuspended) {
+            setIsAutoSuspended(true);
+            setLockoutSecondsLeft(0);
+          } else if (rl.isLocked && rl.secondsLeft > 0) {
+            setLockoutSecondsLeft(rl.secondsLeft);
+          }
           const rawMsg = rl.isSuspended
             ? rl.errorMessage
             : rl.isLocked
-            ? rl.errorMessage
+            ? `Too many failed password attempts (3 maximum) For your security login is locked for ${formatSecondsToTimer(rl.secondsLeft)}`
             : (data.error || rl.errorMessage || 'Email or Password Are incorrect');
           setErrorMessage(rawMsg.replace(/\./g, ''));
           setIsLoading(false);
@@ -204,8 +250,31 @@ export default function LoginView({ onLoginSuccess }) {
             </p>
           </div>
 
+          {/* Live 15-Minute Lockout Countdown Banner */}
+          {lockoutSecondsLeft > 0 && (
+            <div className="mb-3 p-3 rounded-xl bg-rose-950/80 border border-rose-700/80 text-rose-200 text-xs flex items-center justify-center gap-2.5 shadow-lg animate-pulse font-semibold">
+              <Clock className="w-4 h-4 text-rose-400 shrink-0" />
+              <div className="flex flex-col items-center">
+                <span className="text-[11px] text-rose-300">Too many failed attempts (3 maximum)</span>
+                <span className="text-sm font-mono font-bold text-rose-100">
+                  Locked: Try again in {formatSecondsToTimer(lockoutSecondsLeft)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 6-Attempt Suspension Notice Banner (login screen shown correctly so user can send request) */}
+          {isAutoSuspended && lockoutSecondsLeft === 0 && (
+            <div className="mb-3 p-3 rounded-xl bg-amber-950/70 border border-amber-700/70 text-amber-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+              <div className="flex-1 font-medium leading-tight">
+                Your account has been automatically suspended due to unusual failed password attempts Please contact administrator
+              </div>
+            </div>
+          )}
+
           {/* Error Banner */}
-          {errorMessage && (
+          {errorMessage && !isAutoSuspended && lockoutSecondsLeft === 0 && (
             <div className="mb-3 p-2.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 font-medium leading-tight whitespace-pre-line">
@@ -240,10 +309,13 @@ export default function LoginView({ onLoginSuccess }) {
                   type="email"
                   required
                   autoComplete="email"
+                  disabled={isLoading || lockoutSecondsLeft > 0}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email address"
-                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  className={`w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-950/70 border rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all ${
+                    lockoutSecondsLeft > 0 ? 'border-rose-800/60 opacity-60 cursor-not-allowed' : 'border-slate-700/80'
+                  }`}
                 />
               </div>
             </div>
@@ -261,15 +333,19 @@ export default function LoginView({ onLoginSuccess }) {
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
+                  disabled={isLoading || lockoutSecondsLeft > 0}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-9 pr-10 py-2 sm:py-2.5 bg-slate-950/70 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  className={`w-full pl-9 pr-10 py-2 sm:py-2.5 bg-slate-950/70 border rounded-xl text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all ${
+                    lockoutSecondsLeft > 0 ? 'border-rose-800/60 opacity-60 cursor-not-allowed' : 'border-slate-700/80'
+                  }`}
                 />
                 <button
                   type="button"
+                  disabled={lockoutSecondsLeft > 0}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-40"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
@@ -279,13 +355,22 @@ export default function LoginView({ onLoginSuccess }) {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full mt-2 py-2.5 sm:py-3 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 active:scale-[0.99] disabled:opacity-50 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-700/30 flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+              disabled={isLoading || lockoutSecondsLeft > 0}
+              className={`w-full mt-2 py-2.5 sm:py-3 px-4 bg-gradient-to-r text-white font-semibold rounded-xl text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                lockoutSecondsLeft > 0
+                  ? 'from-rose-800 to-rose-900 border border-rose-700/60 shadow-rose-950/50 opacity-80 cursor-not-allowed'
+                  : 'from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 active:scale-[0.99] disabled:opacity-50 shadow-emerald-700/30'
+              }`}
             >
               {isLoading ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   <span className="whitespace-nowrap">Verifying Credentials</span>
+                </>
+              ) : lockoutSecondsLeft > 0 ? (
+                <>
+                  <Clock className="w-4 h-4 animate-spin shrink-0" />
+                  <span className="whitespace-nowrap">Locked ({formatSecondsToTimer(lockoutSecondsLeft)})</span>
                 </>
               ) : (
                 <>

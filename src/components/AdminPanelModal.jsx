@@ -34,7 +34,8 @@ import { apiFetch } from '../services/apiClient';
 import {
   checkAccountPasswordRateLimit,
   recordAccountPasswordFailure,
-  resetAccountPasswordRateLimit
+  resetAccountPasswordRateLimit,
+  formatSecondsToTimer
 } from '../services/rateLimiter';
 
 export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
@@ -967,7 +968,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
             {gateLockoutSeconds > 0 && (
               <div className="w-full p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center gap-2 text-xs text-rose-300 font-semibold animate-pulse">
                 <Clock className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>Security Lockout: Try again in {gateLockoutSeconds}s</span>
+                <span>Security Lockout: Try again in {formatSecondsToTimer(gateLockoutSeconds)}</span>
               </div>
             )}
 
@@ -1026,7 +1027,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       <span>Verifying...</span>
                     </>
                   ) : gateLockoutSeconds > 0 ? (
-                    <span>Locked ({gateLockoutSeconds}s)</span>
+                    <span>Locked ({formatSecondsToTimer(gateLockoutSeconds)})</span>
                   ) : (
                     <>
                       <Lock className="w-3.5 h-3.5" />
