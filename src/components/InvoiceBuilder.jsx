@@ -189,7 +189,7 @@ export default function InvoiceBuilder({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex justify-center items-start pt-[max(env(safe-area-inset-top),0.75rem)] px-2 sm:px-4 pb-24 md:pb-8">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex justify-center items-start pt-[max(env(safe-area-inset-top),2.5rem)] px-2 sm:px-4 pb-24 md:pb-8">
       <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 my-1 sm:my-6 overflow-hidden flex flex-col relative">
         {/* Sticky Editor Modal Header */}
         <div className="no-print sticky top-0 z-20 p-3.5 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white/95 dark:bg-slate-950/95 backdrop-blur-md shadow-sm">

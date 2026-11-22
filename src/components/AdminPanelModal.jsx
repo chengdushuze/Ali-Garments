@@ -852,6 +852,15 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl text-slate-100 overflow-hidden">
+        {/* Top Status Bar Spacer & Crisp Divider Line */}
+        <div className="w-full bg-slate-950 border-b border-slate-800 h-10 sm:h-2 flex items-center justify-between px-3.5 shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>ALI Garments Administration</span>
+          </div>
+          <div className="w-10 h-1 rounded-full bg-slate-700" />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80">
           <div className="flex items-center gap-2.5">

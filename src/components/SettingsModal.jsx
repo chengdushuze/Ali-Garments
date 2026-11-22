@@ -19,7 +19,9 @@ import {
   KeyRound,
   ShieldAlert,
   ChevronRight,
-  LogOut
+  ChevronDown,
+  LogOut,
+  Layers
 } from 'lucide-react';
 import { getFullBackupData, restoreFullBackupData } from '../services/storage';
 import { apiFetch } from '../services/apiClient';
@@ -39,6 +41,45 @@ export default function SettingsModal({
   onLogout
 }) {
   const [formData, setFormData] = useState({ ...settings });
+
+  // Custom Redesigned Section Picker Popup State
+  const [isSectionPickerOpen, setIsSectionPickerOpen] = useState(false);
+  const [activeSectionId, setActiveSectionId] = useState('sec-company');
+
+  const SECTIONS = [
+    {
+      id: 'sec-company',
+      title: 'Company Profile & Logo',
+      urdu: 'کمپنی تفصیل اور لوگو',
+      desc: 'Shop name, currency, tagline, phone & invoice logo',
+      icon: Building,
+      color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800',
+    },
+    {
+      id: 'sec-payments',
+      title: 'Payment Info & QR Code',
+      urdu: 'بینک اور کیو آر کوڈ',
+      desc: 'Bank accounts, IBAN, Raast ID, JazzCash & invoice QR',
+      icon: CreditCard,
+      color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800',
+    },
+    {
+      id: 'sec-applock',
+      title: 'App Lock & PIN Security',
+      urdu: 'ایپ لاک اور پن کوڈ سیکیورٹی',
+      desc: '4-digit security PIN, auto-lock policies & protection',
+      icon: Lock,
+      color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800',
+    },
+    {
+      id: 'sec-backup',
+      title: 'Data Backup & Excel Export',
+      urdu: 'بیک اپ اور ایکسل ایکسپورٹ',
+      desc: 'Cloud D1 snapshots, Excel workbooks & JSON export',
+      icon: Download,
+      color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800',
+    },
+  ];
 
   // App Lock Form State
   const [newPin, setNewPin] = useState('');
@@ -234,15 +275,24 @@ export default function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-black/75 backdrop-blur-sm overflow-hidden animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 md:rounded-3xl max-w-2xl w-full h-full md:h-auto md:max-h-[92vh] shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-        {/* Header (With pt-7 for Mobile Status Bar Clearance) */}
-        <div className="pt-7 sm:pt-5 pb-3.5 sm:pb-4 px-4 sm:px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-950/50 shrink-0">
+      <div className="bg-white dark:bg-slate-900 md:rounded-3xl max-w-2xl w-full h-full md:h-auto md:max-h-[92vh] shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col font-sans">
+        {/* Top Status Bar Spacer & Crisp Divider Line (Separates Android status bar from app layout) */}
+        <div className="w-full bg-slate-100 dark:bg-slate-950 border-b border-slate-300 dark:border-slate-800 h-10 sm:h-2 flex items-center justify-between px-3.5 shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>ALI Garments Settings</span>
+          </div>
+          <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+        </div>
+
+        {/* Header */}
+        <div className="py-3 px-4 sm:px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-950/50 shrink-0">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Building className="w-5 h-5 text-emerald-600" />
               <span>Settings • ترتیبات</span>
             </h3>
-            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
               Made with ❤️ by{' '}
               <a
                 href="https://www.chengdushuze.com"
@@ -263,22 +313,32 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* Quick-Jump Section Navigation (Clean Dropdown Menu as requested) */}
-        <div className="px-4 py-2.5 bg-slate-100/90 dark:bg-slate-950/40 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
-          <label htmlFor="settings-nav-dropdown" className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
+        {/* Quick-Jump Section Navigation (Custom Interactive Trigger Button - No OS Cursive Dialog) */}
+        <div className="px-4 py-2.5 bg-slate-100/95 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 font-sans">
+          <div className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
             <ChevronRight className="w-3.5 h-3.5 text-emerald-600" />
             <span>Jump to:</span>
-          </label>
-          <select
-            id="settings-nav-dropdown"
-            onChange={(e) => scrollToSection(e.target.value)}
-            className="w-full max-w-sm px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs"
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsSectionPickerOpen(true)}
+            className="flex-1 max-w-sm flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300/80 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 text-xs font-bold text-slate-800 dark:text-slate-100 shadow-xs transition-all cursor-pointer active:scale-[0.98]"
           >
-            <option value="sec-company">🏢 Company Profile & Logo</option>
-            <option value="sec-payments">💳 Payment Info & QR Code</option>
-            <option value="sec-applock">🔒 App Lock & PIN Security</option>
-            <option value="sec-backup">💾 Data Backup & Excel Export</option>
-          </select>
+            <span className="flex items-center gap-2 truncate font-sans">
+              <span className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+                {(() => {
+                  const curr = SECTIONS.find(s => s.id === activeSectionId) || SECTIONS[0];
+                  const Icon = curr.icon;
+                  return <Icon className="w-3.5 h-3.5" />;
+                })()}
+              </span>
+              <span className="truncate">
+                {(SECTIONS.find(s => s.id === activeSectionId) || SECTIONS[0]).title}
+              </span>
+            </span>
+            <ChevronDown className="w-4 h-4 text-emerald-600 shrink-0" />
+          </button>
         </div>
 
         {/* Unified Scrollable Container: ALL 4 SECTIONS VISIBLE TOGETHER */}
@@ -1096,6 +1156,99 @@ export default function SettingsModal({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Redesigned Section Picker Modal (Replaces Android Native Cursive Select Dialog) */}
+      {isSectionPickerOpen && (
+        <div 
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setIsSectionPickerOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 animate-in zoom-in-95 duration-200 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border border-emerald-200 dark:border-emerald-800">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white font-sans">
+                    Jump to Section • سیکشن منتخب کریں
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">
+                    Choose a section to scroll directly
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSectionPickerOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {SECTIONS.map((sec) => {
+                const Icon = sec.icon;
+                const isSelected = activeSectionId === sec.id;
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveSectionId(sec.id);
+                      setIsSectionPickerOpen(false);
+                      scrollToSection(sec.id);
+                    }}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all cursor-pointer font-sans active:scale-[0.99] ${
+                      isSelected
+                        ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
+                        : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`p-2 rounded-xl border shrink-0 ${sec.color}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                          {sec.title}
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate font-sans mt-0.5">
+                          {sec.urdu} • {sec.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Clean Sans-serif Radio Indicator */}
+                    <div className="ml-3 shrink-0">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                        isSelected
+                          ? 'border-emerald-600 bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-500'
+                          : 'border-slate-300 dark:border-slate-600 bg-transparent'
+                      }`}>
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSectionPickerOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+              >
+                Close • بند کریں
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -127,76 +127,67 @@ export default function CustomerDetail({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm overflow-hidden flex flex-col h-full transition-all">
-      {/* Top Profile Header (With pt-7 for Mobile Status Bar & Notch Clearance) */}
-      <div className="pt-7 sm:pt-5 pb-3.5 px-3.5 sm:px-5 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/50">
-        <div className="flex items-start justify-between gap-2.5">
-          {/* Left: Back Arrow + Avatar + Party Details (Name, Wholesale Tag, Phone, Address beautifully aligned) */}
-          <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
+      {/* Top Status Bar Spacer & Crisp Divider Line (Separates Android status bar from app layout) */}
+      <div className="w-full bg-slate-100 dark:bg-slate-950 border-b border-slate-300 dark:border-slate-800 h-10 sm:h-2 flex items-center justify-between px-3.5 shrink-0">
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>ALI Garments Khata</span>
+        </div>
+        <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+      </div>
+
+      {/* Top Profile Header (Realigned for clean spacing, symmetry, and balance) */}
+      <div className="p-3 sm:p-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/50 space-y-2.5">
+        {/* Row 1: Back Arrow + Avatar + Party Name with Category + Balance */}
+        <div className="flex items-center justify-between gap-2.5">
+          {/* Left: Back Arrow + Avatar + Party Name + Category Tag */}
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <button
               type="button"
               onClick={onBack}
               aria-label="Back to Party List"
-              className="p-2 -ml-1 rounded-xl text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer shadow-xs mt-0.5"
+              className="p-2 rounded-xl text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0 cursor-pointer shadow-xs active:scale-95"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
 
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm sm:text-base flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0 mt-0.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
               {customer.name ? customer.name.slice(0, 2).toUpperCase() : 'AG'}
             </div>
 
             <div className="min-w-0 flex-1">
-              {/* Row 1: Full Party Name + Edit Button */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight break-words">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight truncate">
                   {customer.name}
                 </h2>
                 {onOpenEditCustomer && (
                   <button
                     type="button"
                     onClick={() => onOpenEditCustomer(customer)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0"
+                    className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
                     title="Edit Party Details • کھاتہ تفصیل تبدیل کریں"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
-
-              {/* Row 2: Tag (Wholesale/Retail) + Phone Number */}
-              <div className="flex items-center gap-2 flex-wrap text-xs mt-1">
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0">
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0">
                   {customer.category || 'Wholesale'}
                 </span>
-
-                {customer.phone && (
-                  <a
-                    href={`tel:${customer.phone}`}
-                    className="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-mono text-[11px] font-semibold"
-                  >
-                    <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                    <span>{customer.phone}</span>
-                  </a>
-                )}
               </div>
-
-              {/* Row 3: Address */}
-              {customer.address && (
-                <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="truncate">{customer.address}</span>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Right: Balance Badge */}
-          <div className="text-right shrink-0 pl-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Balance'}
+          {/* Right: Net Balance Badge */}
+          <div className="text-right shrink-0 pl-2">
+            <span className={`text-[10px] font-black uppercase tracking-wider block leading-none ${
+              bal > 0 ? 'text-emerald-600 dark:text-emerald-400' : bal < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'
+            }`}>
+              {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Settled'}
             </span>
             <div
-              className={`text-base sm:text-xl font-black font-mono tabular-nums whitespace-nowrap leading-tight ${
+              className={`text-base sm:text-xl font-black font-mono tabular-nums whitespace-nowrap leading-tight mt-1 ${
                 bal > 0
                   ? 'text-emerald-600 dark:text-emerald-400'
                   : bal < 0
@@ -207,6 +198,26 @@ export default function CustomerDetail({
               {currency}&nbsp;{Math.abs(bal).toLocaleString()}
             </div>
           </div>
+        </div>
+
+        {/* Row 2: Phone Pill + Address Pill in a clean metadata strip */}
+        <div className="flex items-center gap-2 flex-wrap text-xs pt-1.5 border-t border-slate-200/60 dark:border-slate-800/80">
+          {customer.phone && (
+            <a
+              href={`tel:${customer.phone}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 hover:bg-emerald-100 font-mono text-[11px] font-bold shrink-0 transition-colors"
+            >
+              <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span>{customer.phone}</span>
+            </a>
+          )}
+
+          {customer.address && (
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/80 text-[11px] min-w-0 max-w-full">
+              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+              <span className="truncate">{customer.address}</span>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons: 3 Full Lines as requested (No 2.5 lines) */}
