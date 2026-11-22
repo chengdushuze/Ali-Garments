@@ -23,7 +23,7 @@ import AppLockScreen from './components/AppLockScreen';
 import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe, ArrowUpCircle, DownloadCloud, CheckCircle2 } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 
-export const CURRENT_APP_VERSION = 'v1.0';
+export const CURRENT_APP_VERSION = 'v1.0.1';
 
 export function isVersionAllowed(currentVer, allowedStr) {
   if (!allowedStr || !allowedStr.trim()) {
