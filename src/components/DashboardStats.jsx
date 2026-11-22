@@ -161,27 +161,27 @@ export default function DashboardStats({
         </div>
       </div>
 
-      {/* Quick Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-xl p-3">
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200 font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      {/* Quick Actions Bar - Optimized for Mobile & Desktop */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-3 sm:p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200 font-bold shrink-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
           <span>Fast Ledger Controls:</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full sm:w-auto">
           <button
             onClick={onOpenNewCustomer}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all active:scale-95 whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all active:scale-95 cursor-pointer w-full whitespace-nowrap"
           >
-            <PlusCircle className="w-4 h-4" />
-            <span className="whitespace-nowrap">Add Party / Customer</span>
+            <PlusCircle className="w-4 h-4 shrink-0" />
+            <span>Add Party / Customer</span>
           </button>
 
           <button
             onClick={onDownloadAllExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all active:scale-95 whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 active:bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm transition-all active:scale-95 cursor-pointer w-full whitespace-nowrap"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span className="whitespace-nowrap">Download All Data (.xlsx)</span>
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Download All Data (.xlsx)</span>
           </button>
         </div>
       </div>

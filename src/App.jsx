@@ -1102,7 +1102,7 @@ export default function App() {
         )}
 
         {/* On Desktop: Always show stats. On Mobile/Phone: Show stats when Analytics tab active */}
-        <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block' : 'hidden md:block'}`}>
+        <div className={`transition-all duration-300 ${mobileTab === 'stats' ? 'block pt-2 sm:pt-0' : 'hidden md:block'}`}>
           <DashboardStats
             customers={customers}
             transactionsMap={transactionsMap}

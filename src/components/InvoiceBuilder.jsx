@@ -189,38 +189,39 @@ export default function InvoiceBuilder({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 my-8 overflow-hidden flex flex-col">
-        {/* Editor Modal Header */}
-        <div className="no-print p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/50">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm flex justify-center items-start pt-[max(env(safe-area-inset-top),0.75rem)] px-2 sm:px-4 pb-24 md:pb-8">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 my-1 sm:my-6 overflow-hidden flex flex-col relative">
+        {/* Sticky Editor Modal Header */}
+        <div className="no-print sticky top-0 z-20 p-3.5 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white/95 dark:bg-slate-950/95 backdrop-blur-md shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 shrink-0">
               <FileText className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
                   Smart Invoice Creator
                 </h3>
-                <span className="text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700/50">
+                <span className="hidden sm:inline-block text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700/50 shrink-0">
                   Local / In-App (0 D1 Credits)
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Created within website/app — print, PDF, WhatsApp without using D1 credits
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                Created within website/app — print, PDF, WhatsApp
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="p-2.5 rounded-xl text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all cursor-pointer shrink-0"
+            title="Close Invoice"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Invoice Body / Print Container */}
-        <div id="printable-invoice" className="p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+        <div id="printable-invoice" className="p-3.5 sm:p-8 space-y-4 sm:space-y-6 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
           {/* Top Brand Banner */}
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4 border-b pb-6 border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-4">

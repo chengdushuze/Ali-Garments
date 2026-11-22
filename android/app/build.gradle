@@ -21,6 +21,9 @@ android {
         checkReleaseBuilds false
         abortOnError false
     }
+    buildFeatures {
+        buildConfig true
+    }
     signingConfigs {
         release {
             storeFile file('ali-garments-release.keystore')
@@ -31,6 +34,7 @@ android {
     }
     buildTypes {
         release {
+            crunchPngs false
             signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
