@@ -20,7 +20,7 @@ import MobileHeader from './components/MobileHeader';
 import MobileHeroCard from './components/MobileHeroCard';
 import MobileMenuDrawer from './components/MobileMenuDrawer';
 import AppLockScreen from './components/AppLockScreen';
-import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe, ArrowUpCircle, DownloadCloud } from 'lucide-react';
+import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe, ArrowUpCircle, DownloadCloud, CheckCircle2 } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
 
 export const CURRENT_APP_VERSION = 'v1.0';
@@ -86,6 +86,14 @@ export default function App() {
   const [customers, setCustomers] = useState([]);
   const [transactionsMap, setTransactionsMap] = useState({});
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [globalToast, setGlobalToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setGlobalToast({ message, type });
+    setTimeout(() => {
+      setGlobalToast(null);
+    }, 3500);
+  };
 
   // Check Closed Multi-User Authentication Status (Offline-First for APK & Mobile)
   useEffect(() => {
@@ -203,6 +211,7 @@ export default function App() {
   const handleSaveAppLockConfig = (newConfig) => {
     setAppLockConfig(newConfig);
     saveAppLockConfig(newConfig);
+    showToast('App Lock Settings Saved Successfully! • سیکیورٹی ترتیبات محفوظ ہو گئیں');
   };
 
   // Track tab changes & backgrounding: unlocked for unlimited time on same tab; locks if away for >= 10 minutes
@@ -576,19 +585,22 @@ export default function App() {
     loadData();
   }, []);
 
-  // Theme toggle
+  // Instant, lag-free theme toggle across Android APK & Web
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(nextTheme);
-    const updated = { ...settings, theme: nextTheme };
-    setSettings(updated);
-    saveSettings(updated);
 
     if (nextTheme === 'dark') {
       document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
     }
+
+    setTheme(nextTheme);
+    const updated = { ...settings, theme: nextTheme };
+    setSettings(updated);
+    Promise.resolve().then(() => saveSettings(updated));
   };
 
   // Sync Now trigger (flushes offline sync_queue to Cloudflare D1)
@@ -703,6 +715,7 @@ export default function App() {
       newSettings.d1AccountId && newSettings.d1DatabaseId && newSettings.d1ApiToken
     );
     setSyncState(prev => ({ ...prev, isConfigured }));
+    showToast('Settings Saved Successfully! • ترتیبات کامیابی سے محفوظ ہو گئیں');
   };
 
   // Add Customer
@@ -1079,8 +1092,15 @@ export default function App() {
   };
 
   // Download All Data Excel
-  const handleDownloadAllExcel = () => {
-    downloadAllDataExcel(customers, transactionsMap, settings);
+  const handleDownloadAllExcel = async () => {
+    try {
+      const res = await downloadAllDataExcel(customers, transactionsMap, settings);
+      if (res && res.success) {
+        showToast('Excel Sheet Saved Successfully to Downloads Folder • فائل کامیابی سے محفوظ ہو گئی');
+      }
+    } catch (e) {
+      console.error('Download All Excel error:', e);
+    }
   };
 
   // If verifying authentication session, show custom loading screen
@@ -1344,6 +1364,7 @@ export default function App() {
           setIsSettingsOpen(false);
           setIsLogoutConsentOpen(true);
         }}
+        onShowToast={showToast}
       />
 
       {/* 5. Recycle Bin Modal (30-Day Auto Retention & Multi-Device Sync) */}
@@ -1659,14 +1680,28 @@ export default function App() {
                   window.location.href = targetUrl;
                 }
               }}
-              className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold rounded-2xl text-sm shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold rounded-2xl text-sm shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
             >
               <DownloadCloud className="w-4 h-4 shrink-0" />
-              <span>Update App (اپ ڈیٹ کریں)</span>
+              <span className="whitespace-nowrap">Update App (اپ ڈیٹ کریں)</span>
             </button>
 
             <p className="text-[10px] text-slate-500">
               Clicking update redirects you to download or contact support for the latest release.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Global Interactive Toast Notification */}
+      {globalToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[150] max-w-md w-[92%] sm:w-auto px-4 py-3 rounded-2xl bg-slate-900/95 dark:bg-slate-900/95 text-white border border-emerald-500/50 shadow-2xl backdrop-blur-md flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-100 whitespace-nowrap overflow-hidden text-ellipsis">
+              {globalToast.message}
             </p>
           </div>
         </div>

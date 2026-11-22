@@ -19,29 +19,18 @@
   }
 }
 
-/* Smooth Light/Dark Mode Transitions across Web and Mobile APK */
+/* Smooth, lag-free Light/Dark Mode Transitions */
 html,
 body,
-#root,
-div,
+#root {
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
 header,
 nav,
 aside,
-main,
-footer,
-section,
-article,
-button,
-input,
-textarea,
-select,
-table,
-tr,
-td,
-th {
-  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
-  transition-duration: 280ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+main {
+  transition: background-color 200ms ease, border-color 200ms ease;
 }
 
 .pt-safe {

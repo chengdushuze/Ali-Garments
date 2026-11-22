@@ -168,21 +168,21 @@ export default function EditCustomerModal({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              className="px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
             >
               {isSubmitting ? (
-                <span>Saving...</span>
+                <span className="whitespace-nowrap">Saving...</span>
               ) : (
                 <>
-                  <Check className="w-4 h-4" />
-                  <span>Save Changes • محفوظ کریں</span>
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Save Changes • محفوظ کریں</span>
                 </>
               )}
             </button>

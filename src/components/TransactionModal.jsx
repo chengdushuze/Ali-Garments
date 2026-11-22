@@ -83,27 +83,27 @@ export default function TransactionModal({
             <button
               type="button"
               onClick={() => setType('give')}
-              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-xs transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
                 type === 'give'
                   ? 'bg-rose-600 text-white shadow-md'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
             >
-              <ArrowUpRight className="w-4 h-4" />
-              <span>You Gave (ادھار دیا)</span>
+              <ArrowUpRight className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">You Gave (ادھار دیا)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setType('get')}
-              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-xs transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
                 type === 'get'
                   ? 'bg-emerald-600 text-white shadow-md'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
             >
-              <ArrowDownLeft className="w-4 h-4" />
-              <span>You Got (وصولی ملی)</span>
+              <ArrowDownLeft className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">You Got (وصولی ملی)</span>
             </button>
           </div>
 
@@ -199,13 +199,13 @@ export default function TransactionModal({
           <div className="pt-2">
             <button
               type="submit"
-              className={`w-full py-3.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all active:scale-98 ${
+              className={`w-full py-3.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all active:scale-98 whitespace-nowrap cursor-pointer ${
                 type === 'give'
                   ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
                   : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
               }`}
             >
-              Save Entry & Sync ({type === 'give' ? 'ادھار دیا' : 'وصولی محفوظ'})
+              <span className="whitespace-nowrap">Save Entry & Sync ({type === 'give' ? 'ادھار دیا' : 'وصولی محفوظ'})</span>
             </button>
           </div>
         </form>

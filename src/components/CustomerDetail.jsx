@@ -35,6 +35,19 @@ export default function CustomerDetail({
   const [txSearch, setTxSearch] = useState('');
   const [selectedTxIds, setSelectedTxIds] = useState([]);
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'month', 'week'
+  const [localToast, setLocalToast] = useState('');
+
+  const handleExportCustomerExcel = async () => {
+    try {
+      const res = await downloadCustomerExcel(customer, transactions, settings);
+      if (res && res.success) {
+        setLocalToast('Excel Sheet Saved Successfully to Downloads Folder • فائل کامیابی سے محفوظ ہو گئی');
+        setTimeout(() => setLocalToast(''), 3500);
+      }
+    } catch (e) {
+      console.error('Excel export error:', e);
+    }
+  };
 
   if (!customer) return null;
 
@@ -126,7 +139,14 @@ export default function CustomerDetail({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm overflow-hidden flex flex-col h-full transition-all">
+    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-sm overflow-hidden flex flex-col h-full transition-all relative">
+      {/* Toast Notification Banner */}
+      {localToast && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-slate-900 text-white border border-emerald-500/50 shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="whitespace-nowrap">{localToast}</span>
+        </div>
+      )}
       {/* Top Status Bar Spacer & Crisp Divider Line (Mobile Android Only) */}
       <div className="w-full bg-slate-100 dark:bg-slate-950 border-b border-slate-300 dark:border-slate-800 h-10 md:hidden flex items-center justify-between px-3.5 shrink-0">
         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
@@ -248,12 +268,12 @@ export default function CustomerDetail({
 
               <button
                 type="button"
-                onClick={() => downloadCustomerExcel(customer, transactions, settings)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-xs cursor-pointer"
+                onClick={handleExportCustomerExcel}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-xs cursor-pointer whitespace-nowrap"
                 title="Export Ledger to Excel"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Excel</span>
+                <span className="whitespace-nowrap">Excel</span>
               </button>
 
               <button
@@ -417,11 +437,11 @@ export default function CustomerDetail({
             {/* Line 2: Excel Sheet & Invoice */}
             <button
               type="button"
-              onClick={() => downloadCustomerExcel(customer, transactions, settings)}
+              onClick={handleExportCustomerExcel}
               className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all active:scale-95 whitespace-nowrap cursor-pointer shadow-xs"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Excel Sheet</span>
+              <span className="whitespace-nowrap">Excel Sheet</span>
             </button>
 
             <button
@@ -471,25 +491,25 @@ export default function CustomerDetail({
           {/* Ledger Summary Bar: Given, Received, Entries on EXACT SAME LINE! */}
           <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 text-center">
             <div className="p-1.5 sm:p-2 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40">
-              <span className="text-[10px] uppercase font-bold text-rose-600/80 dark:text-rose-400/80 block leading-none">
+              <span className="text-[10px] uppercase font-bold text-rose-600/80 dark:text-rose-400/80 block leading-none whitespace-nowrap">
                 Given (دیئے)
               </span>
-              <span className="text-xs sm:text-sm font-extrabold font-mono text-rose-600 dark:text-rose-400 block mt-1 leading-tight whitespace-nowrap truncate">
+              <span className="text-xs sm:text-sm font-extrabold font-mono text-rose-600 dark:text-rose-400 block mt-1 leading-tight whitespace-nowrap">
                 {currency} {totalGiven.toLocaleString()}
               </span>
             </div>
 
             <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40">
-              <span className="text-[10px] uppercase font-bold text-emerald-600/80 dark:text-emerald-400/80 block leading-none">
+              <span className="text-[10px] uppercase font-bold text-emerald-600/80 dark:text-emerald-400/80 block leading-none whitespace-nowrap">
                 Received (ملے)
               </span>
-              <span className="text-xs sm:text-sm font-extrabold font-mono text-emerald-600 dark:text-emerald-400 block mt-1 leading-tight whitespace-nowrap truncate">
+              <span className="text-xs sm:text-sm font-extrabold font-mono text-emerald-600 dark:text-emerald-400 block mt-1 leading-tight whitespace-nowrap">
                 {currency} {totalGot.toLocaleString()}
               </span>
             </div>
 
             <div className="p-1.5 sm:p-2 rounded-xl bg-slate-100/70 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block leading-none">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block leading-none whitespace-nowrap">
                 Entries (اندراج)
               </span>
               <span className="text-xs sm:text-sm font-extrabold font-mono text-slate-800 dark:text-slate-200 block mt-1 leading-tight whitespace-nowrap">

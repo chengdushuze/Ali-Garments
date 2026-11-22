@@ -146,9 +146,9 @@ export default function AddCustomerModal({ isOpen, onClose, onSave, currency = '
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-3 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 active:scale-98 transition-all"
+              className="w-full py-3 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 active:scale-98 transition-all whitespace-nowrap cursor-pointer"
             >
-              Add Party to Ledger
+              <span className="whitespace-nowrap">Add Party to Ledger</span>
             </button>
           </div>
         </form>

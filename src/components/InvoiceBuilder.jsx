@@ -550,27 +550,27 @@ export default function InvoiceBuilder({
           <div className="flex items-center gap-2">
             <button
               onClick={handleWhatsAppShare}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500 hover:bg-green-600 text-white transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500 hover:bg-green-600 text-white transition-all active:scale-95 whitespace-nowrap cursor-pointer"
             >
-              <Share2 className="w-4 h-4" />
-              <span>Share WhatsApp</span>
+              <Share2 className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Share WhatsApp</span>
             </button>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer"
             >
               Close
             </button>
 
             <button
               onClick={handleSaveAndPrint}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
-              <span>Save & Print Invoice</span>
+              <Printer className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Save & Print Invoice</span>
             </button>
           </div>
         </div>

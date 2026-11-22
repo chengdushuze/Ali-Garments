@@ -38,7 +38,8 @@ export default function SettingsModal({
   onSaveAppLockConfig,
   onTriggerAppLock,
   currentUser,
-  onLogout
+  onLogout,
+  onShowToast
 }) {
   const [formData, setFormData] = useState({ ...settings });
 
@@ -171,6 +172,9 @@ export default function SettingsModal({
   const handleSave = () => {
     onSaveSettings(formData);
     onClose();
+    if (onShowToast) {
+      onShowToast('Settings Saved Successfully! • ترتیبات کامیابی سے محفوظ ہو گئیں');
+    }
   };
 
   // Smooth scroll to a section on the same screen
@@ -196,6 +200,9 @@ export default function SettingsModal({
       localStorage.setItem('ali_garments_last_backup_time', nowIso);
     } catch (e) {}
     setBackupInfo(prev => ({ ...prev, localTime: nowIso }));
+    if (onShowToast) {
+      onShowToast('Backup Saved Successfully! • بیک اپ کامیابی سے محفوظ ہو گیا');
+    }
   };
 
   // Restore JSON Backup
@@ -927,10 +934,10 @@ export default function SettingsModal({
                 <button
                   type="button"
                   onClick={onDownloadAllExcel}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-shrink-0 cursor-pointer active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0 cursor-pointer active:scale-95 transition-all whitespace-nowrap"
                 >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Download XLS</span>
+                  <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Download XLS</span>
                 </button>
               </div>
 
@@ -947,10 +954,10 @@ export default function SettingsModal({
                 <button
                   type="button"
                   onClick={handleDownloadBackup}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white flex-shrink-0 cursor-pointer active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white shrink-0 cursor-pointer active:scale-95 transition-all whitespace-nowrap"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Export JSON</span>
+                  <Download className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Export JSON</span>
                 </button>
               </div>
 
@@ -999,10 +1006,10 @@ export default function SettingsModal({
                   onClose();
                   onLogout();
                 }}
-                className="w-full py-3 px-4 rounded-2xl font-bold text-xs sm:text-sm bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full py-3 px-4 rounded-2xl font-bold text-xs sm:text-sm bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs whitespace-nowrap"
               >
-                <LogOut className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                <span>Logout of Account • لاگ آؤٹ</span>
+                <LogOut className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span className="whitespace-nowrap">Logout of Account • لاگ آؤٹ</span>
               </button>
             </div>
           )}
@@ -1014,14 +1021,14 @@ export default function SettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer whitespace-nowrap"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
           >
             Save Settings & Changes
           </button>

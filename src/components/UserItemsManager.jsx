@@ -139,14 +139,14 @@ export default function UserItemsManager({ currentUser }) {
         <button
           type="submit"
           disabled={isAdding || !newContent.trim()}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-xl text-sm shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-xl text-sm shadow-sm transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
         >
           {isAdding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
           ) : (
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 shrink-0" />
           )}
-          <span className="hidden sm:inline">Add Item</span>
+          <span className="hidden sm:inline whitespace-nowrap">Add Item</span>
         </button>
       </form>
 
