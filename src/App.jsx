@@ -20,8 +20,29 @@ import MobileHeader from './components/MobileHeader';
 import MobileHeroCard from './components/MobileHeroCard';
 import MobileMenuDrawer from './components/MobileMenuDrawer';
 import AppLockScreen from './components/AppLockScreen';
-import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe } from 'lucide-react';
+import { LogOut, CloudUpload, RefreshCw, AlertTriangle, ShieldCheck, Globe, ArrowUpCircle, DownloadCloud } from 'lucide-react';
 import { apiFetch, clearStoredToken } from './services/apiClient';
+
+export const CURRENT_APP_VERSION = 'v1.0';
+
+export function isVersionAllowed(currentVer, allowedStr) {
+  if (!allowedStr || !allowedStr.trim()) {
+    // If there is no version written inside super admin panel it allow all version
+    return true;
+  }
+  const cleanCurrent = (currentVer || '').trim().toLowerCase().replace(/^v/, '');
+  const tokens = allowedStr
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (tokens.length === 0) return true;
+
+  return tokens.some(token => {
+    const cleanToken = token.replace(/^v/, '');
+    return cleanToken === cleanCurrent || token === (currentVer || '').trim().toLowerCase();
+  });
+}
 import {
   getSettings,
   saveSettings,
@@ -116,6 +137,45 @@ export default function App() {
       }
     }
     verifyAuth();
+  }, []);
+
+  // Mobile App Version Verification (Uncrossable update prompt if version mismatch)
+  const [appUpdateRequired, setAppUpdateRequired] = useState(false);
+  const [appUpdateUrl, setAppUpdateUrl] = useState('https://wa.me/8615840121968');
+  const [appAllowedVersions, setAppAllowedVersions] = useState('');
+
+  useEffect(() => {
+    async function checkAppVersion() {
+      const isNative = typeof window !== 'undefined' && (
+        Boolean(window.Capacitor?.isNativePlatform?.()) ||
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'file:'
+      );
+
+      // App version check is enforced for native mobile app
+      if (!isNative) return;
+
+      try {
+        const res = await apiFetch('/api/app-version');
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          const allowed = data.allowedVersions || '';
+          const redirectLink = data.updateUrl || 'https://wa.me/8615840121968';
+          setAppUpdateUrl(redirectLink);
+          setAppAllowedVersions(allowed);
+
+          if (!isVersionAllowed(CURRENT_APP_VERSION, allowed)) {
+            setAppUpdateRequired(true);
+          } else {
+            setAppUpdateRequired(false);
+          }
+        }
+      } catch (e) {
+        console.warn('App version check deferred due to offline status:', e);
+      }
+    }
+
+    checkAppVersion();
   }, []);
 
   // App Lock State (Unlimited on same tab; locks after 10 minutes away)
@@ -1475,7 +1535,68 @@ export default function App() {
         </div>
       )}
 
-      {/* 11. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
+      {/* 11. Uncrossable Mobile App Update Overlay */}
+      {appUpdateRequired && (
+        <div 
+          className="fixed inset-0 z-[9999999] bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4 select-none touch-none"
+          onKeyDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        >
+          <div 
+            className="bg-slate-900 border-2 border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-[0_0_50px_rgba(16,185,129,0.25)] space-y-5 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
+              <ArrowUpCircle className="w-8 h-8 animate-bounce" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-black text-white tracking-tight">
+                Update Required
+              </h3>
+              <p className="text-xs text-emerald-400 font-semibold font-urdu">
+                نئی اپ ڈیٹ درکار ہے
+              </p>
+              <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                A new version of the Ali Garments app is required to continue. Please update your application to access the Khata system.
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 text-xs space-y-1.5 font-mono">
+              <div className="flex justify-between items-center text-slate-400">
+                <span>Installed Version:</span>
+                <span className="font-bold text-rose-400">{CURRENT_APP_VERSION}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-400">
+                <span>Supported:</span>
+                <span className="font-bold text-emerald-400 truncate max-w-[140px]">{appAllowedVersions || 'Latest'}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const targetUrl = appUpdateUrl || 'https://wa.me/8615840121968';
+                if (window.Capacitor?.isNativePlatform?.()) {
+                  window.open(targetUrl, '_system');
+                } else {
+                  window.location.href = targetUrl;
+                }
+              }}
+              className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold rounded-2xl text-sm shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <DownloadCloud className="w-4 h-4 shrink-0" />
+              <span>Update App (اپ ڈیٹ کریں)</span>
+            </button>
+
+            <p className="text-[10px] text-slate-500">
+              Clicking update redirects you to download or contact support for the latest release.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 12. Secure App Lock Overlay (Mobile APK & Browser Protection) */}
       <AppLockScreen
         isLocked={isAppLocked}
         onUnlock={() => {

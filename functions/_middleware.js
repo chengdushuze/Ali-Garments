@@ -157,8 +157,8 @@ export async function onRequest(context) {
   }
 
   // 7. Pakistan-Only Geo Check with per-user bypass on authenticated /api/* endpoints
-  // Allow static frontend assets, root '/', and public auth routes ('/api/login', '/api/logout') to load
-  const isPublicAuthRoute = pathname === '/api/login' || pathname === '/api/logout';
+  // Allow static frontend assets, root '/', and public routes ('/api/login', '/api/logout', '/api/app-version') to load
+  const isPublicAuthRoute = pathname === '/api/login' || pathname === '/api/logout' || pathname === '/api/app-version';
   if (pathname.startsWith('/api/') && !isPublicAuthRoute) {
     if (clientCountry && clientCountry !== 'PK') {
       // Check user session for allow_foreign_access bypass

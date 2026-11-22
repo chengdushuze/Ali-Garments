@@ -27,7 +27,8 @@ import {
   Copy,
   Check,
   Globe,
-  Smartphone
+  Smartphone,
+  Save
 } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
 
@@ -141,6 +142,68 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
       console.warn('Failed to load backup info:', e);
     } finally {
       setLastBackupInfo(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  // Mobile App Version Control State (Web Super Admin Only)
+  const isNative = typeof window !== 'undefined' && (
+    Boolean(window.Capacitor?.isNativePlatform?.()) ||
+    window.location.protocol === 'capacitor:' ||
+    window.location.protocol === 'file:'
+  );
+  const [allowedVersions, setAllowedVersions] = useState('');
+  const [updateUrl, setUpdateUrl] = useState('https://wa.me/8615840121968');
+  const [isLoadingVersionSettings, setIsLoadingVersionSettings] = useState(false);
+  const [isSavingVersionSettings, setIsSavingVersionSettings] = useState(false);
+  const [versionSettingsStatus, setVersionSettingsStatus] = useState({ type: '', text: '' });
+
+  const fetchAppVersionSettings = async () => {
+    setIsLoadingVersionSettings(true);
+    try {
+      const res = await apiFetch('/api/app-version');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setAllowedVersions(data.allowedVersions || '');
+        setUpdateUrl(data.updateUrl || 'https://wa.me/8615840121968');
+      }
+    } catch (e) {
+      console.warn('Failed to load version settings:', e);
+    } finally {
+      setIsLoadingVersionSettings(false);
+    }
+  };
+
+  const handleSaveAppVersionSettings = async (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    setIsSavingVersionSettings(true);
+    setVersionSettingsStatus({ type: '', text: '' });
+    try {
+      const res = await apiFetch('/api/app-version', {
+        method: 'POST',
+        body: JSON.stringify({
+          allowedVersions,
+          updateUrl,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setVersionSettingsStatus({
+          type: 'success',
+          text: 'App version restrictions and update redirect link updated successfully',
+        });
+      } else {
+        setVersionSettingsStatus({
+          type: 'error',
+          text: (data.error || 'Failed to update app versions').replace(/\./g, ''),
+        });
+      }
+    } catch (err) {
+      setVersionSettingsStatus({
+        type: 'error',
+        text: 'Network error while saving app version settings',
+      });
+    } finally {
+      setIsSavingVersionSettings(false);
     }
   };
 
@@ -961,6 +1024,24 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
             <Database className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">D1 Backup</span>
           </button>
+
+          {currentUser?.role === 'super_admin' && !isNative && (
+            <button
+              type="button"
+              onClick={() => {
+                setAdminTab('app_version');
+                fetchAppVersionSettings();
+              }}
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 font-semibold rounded-t-xl transition-all whitespace-nowrap border-b-2 cursor-pointer ${
+                adminTab === 'app_version'
+                  ? 'border-emerald-500 text-white bg-slate-900'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="whitespace-nowrap">App Version</span>
+            </button>
+          )}
         </div>
 
         {/* Content Body */}
@@ -1576,6 +1657,167 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 4: MOBILE APP VERSION CONTROL (WEB SUPER ADMIN ONLY) */}
+          {adminTab === 'app_version' && currentUser?.role === 'super_admin' && !isNative && (
+            <div className="bg-slate-950/70 border border-emerald-500/30 rounded-2xl p-5 shadow-inner space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800 shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base text-white flex items-center gap-2">
+                      <span>Mobile App Version Control</span>
+                      <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-700 rounded-full">
+                        Web Super Admin Only
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Define allowed mobile APK versions. If a mobile app does not match, it displays an unclosable update popup.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchAppVersionSettings}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 border border-slate-700/80 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
+                  title="Refresh settings"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingVersionSettings ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingVersionSettings ? 'Loading...' : 'Refresh'}</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAppVersionSettings} className="space-y-4">
+                {/* Input 1: Allowed App Versions */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                    <span>Allowed App Versions (Comma Separated)</span>
+                    <span className="text-[11px] font-normal text-slate-400 lowercase">
+                      e.g. v1.0, v1.1
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={allowedVersions}
+                      onChange={(e) => setAllowedVersions(e.target.value)}
+                      placeholder="e.g. v1.0, v1.1 (leave blank to allow all versions)"
+                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono text-sm placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Write versions formatted like <code className="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">v1.0</code> (not v1.0.0) separated by commas. If no versions are written, <strong>all versions are allowed</strong>.
+                  </p>
+
+                  {/* Live parsed badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-slate-500">Active filter:</span>
+                    {allowedVersions.trim() ? (
+                      allowedVersions.split(',').map(s => s.trim()).filter(Boolean).map((v, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-700 rounded-lg text-xs font-mono font-bold">
+                          {v}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-medium">
+                        All versions permitted (No restriction)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Input 2: Update Redirect Link */}
+                <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+                    <span>Update Redirect Link (Link Box)</span>
+                    <span className="text-[11px] font-normal text-slate-400 lowercase">
+                      target destination
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={updateUrl}
+                      onChange={(e) => setUpdateUrl(e.target.value)}
+                      placeholder="https://wa.me/8615840121968"
+                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono text-sm placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    When an unpermitted mobile app version opens, clicking the unclosable <strong>Update</strong> button redirects the user to this link.
+                  </p>
+                </div>
+
+                {/* Quick Preset Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <span className="text-xs text-slate-400">Quick Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setAllowedVersions('v1.0')}
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                  >
+                    v1.0 only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAllowedVersions('v1.0, v1.1')}
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                  >
+                    v1.0 & v1.1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAllowedVersions('')}
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Allow All (Clear)
+                  </button>
+                </div>
+
+                {/* Status Alert */}
+                {versionSettingsStatus.text && (
+                  <div
+                    className={`p-3 rounded-xl text-xs flex items-start gap-2 ${
+                      versionSettingsStatus.type === 'success'
+                        ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300'
+                        : 'bg-rose-950/80 border border-rose-800 text-rose-300'
+                    }`}
+                  >
+                    {versionSettingsStatus.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                    )}
+                    <span className="font-semibold">{versionSettingsStatus.text}</span>
+                  </div>
+                )}
+
+                {/* Action Submit Button */}
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSavingVersionSettings}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSavingVersionSettings ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving Changes...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save App Version Settings</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </div>
