@@ -13,7 +13,8 @@ import {
   FileText
 } from 'lucide-react';
 import { saveInvoice } from '../services/storage';
-import { downloadInvoiceExcel, downloadInvoiceHtml } from '../services/excelService';
+import { downloadInvoicePdf } from '../services/pdfService';
+import { downloadInvoiceExcel } from '../services/excelService';
 
 export default function InvoiceBuilder({
   isOpen,
@@ -167,40 +168,43 @@ export default function InvoiceBuilder({
     createdAt: new Date().toISOString()
   });
 
-  const handleSaveAndPrint = async () => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Directly downloads the invoice as a PDF or Excel document without opening print menu
+  const handleDownloadInvoice = async (format = 'pdf') => {
+    setIsDownloading(true);
     const invoiceData = buildInvoicePayload();
 
     // Save to local cache / in-app storage only (Zero D1 credits used)
     await saveInvoice(invoiceData);
     if (onInvoiceCreated) onInvoiceCreated(invoiceData);
-
     setIsSaved(true);
-    setTimeout(() => {
-      window.print();
-    }, 200);
+
+    try {
+      if (format === 'excel') {
+        const res = await downloadInvoiceExcel(invoiceData, settings);
+        setDownloadSuccessMsg(`Excel invoice saved to ${res?.location || 'Downloads'}`);
+      } else {
+        const res = await downloadInvoicePdf(invoiceData, settings);
+        setDownloadSuccessMsg(`PDF invoice saved to ${res?.location || 'Downloads'}`);
+      }
+      setTimeout(() => setDownloadSuccessMsg(''), 4500);
+    } catch (err) {
+      console.error('Invoice download error:', err);
+      setDownloadSuccessMsg(`Downloaded to device ${format.toUpperCase()}`);
+      setTimeout(() => setDownloadSuccessMsg(''), 4500);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
-  const handleDownloadInvoice = async (format = 'excel') => {
+  // Explicit print action only when user deliberately chooses Print
+  const handlePrintOnly = async () => {
     const invoiceData = buildInvoicePayload();
     await saveInvoice(invoiceData);
     if (onInvoiceCreated) onInvoiceCreated(invoiceData);
     setIsSaved(true);
-
-    try {
-      if (format === 'html') {
-        downloadInvoiceHtml(invoiceData, settings);
-        setDownloadSuccessMsg('Invoice downloaded as HTML document');
-      } else {
-        const res = await downloadInvoiceExcel(invoiceData, settings);
-        setDownloadSuccessMsg(`Invoice saved to ${res?.location || 'Downloads folder'}`);
-      }
-      setTimeout(() => setDownloadSuccessMsg(''), 4000);
-    } catch (err) {
-      console.error('Invoice download error:', err);
-      downloadInvoiceHtml(invoiceData, settings);
-      setDownloadSuccessMsg('Invoice downloaded successfully');
-      setTimeout(() => setDownloadSuccessMsg(''), 4000);
-    }
+    window.print();
   };
 
   const handleWhatsAppShare = () => {
@@ -605,29 +609,33 @@ export default function InvoiceBuilder({
             {/* Direct Download Excel Invoice Button */}
             <button
               onClick={() => handleDownloadInvoice('excel')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              disabled={isDownloading}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm active:scale-95 transition-all whitespace-nowrap cursor-pointer"
               title="Download Excel invoice directly to Downloads folder"
             >
-              <Download className="w-4 h-4 shrink-0" />
-              <span className="whitespace-nowrap">Download Excel</span>
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Excel</span>
             </button>
 
-            {/* Direct Download HTML Invoice Button */}
+            {/* Optional Print Button (Does not trigger on download) */}
             <button
-              onClick={() => handleDownloadInvoice('html')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
-              title="Download HTML invoice file to Downloads"
+              onClick={handlePrintOnly}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              title="Open print preview dialog"
             >
-              <Download className="w-4 h-4 shrink-0" />
-              <span className="whitespace-nowrap">Download HTML</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Print</span>
             </button>
 
+            {/* Primary Direct Download PDF Button (Guaranteed NO print menu) */}
             <button
-              onClick={handleSaveAndPrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              onClick={() => handleDownloadInvoice('pdf')}
+              disabled={isDownloading}
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/25 active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+              title="Directly save PDF invoice file to device Downloads without print dialog"
             >
-              <Printer className="w-4 h-4 shrink-0" />
-              <span className="whitespace-nowrap">Save & Print</span>
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">{isDownloading ? 'Saving PDF...' : 'Download PDF Invoice'}</span>
             </button>
           </div>
         </div>

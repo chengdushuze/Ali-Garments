@@ -108,7 +108,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
   const [isTogglingSuspend, setIsTogglingSuspend] = useState(false);
   const [suspendError, setSuspendError] = useState('');
   const [suspendDurationDays, setSuspendDurationDays] = useState('7');
-  const [suspendReason, setSuspendReason] = useState('We suspected unusual activity on your account.');
+  const [suspendReason, setSuspendReason] = useState('We suspected unusual activity on your account');
 
   // VPN Policy Toggle State
   const [vpnToggleTarget, setVpnToggleTarget] = useState(null);
@@ -1345,7 +1345,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                                         setSuspendError('');
                                         setShowSuspendAdminPassword(false);
                                         setSuspendDurationDays('7');
-                                        setSuspendReason(u.suspension_reason || 'We suspected unusual activity on your account.');
+                                        setSuspendReason(u.suspension_reason || 'We suspected unusual activity on your account');
                                       }}
                                       title={
                                         u.status === 'suspended'
@@ -1412,7 +1412,7 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                               <div className="text-xs text-rose-300 bg-rose-950/40 border border-rose-900/60 rounded-xl px-3 py-2 flex items-center gap-2 font-sans">
                                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                                 <span className="font-semibold text-rose-400 font-mono text-[10px] uppercase">Reason:</span>
-                                <span className="italic truncate">{u.suspension_reason || 'We suspected unusual activity on your account.'}</span>
+                                <span className="italic truncate">{u.suspension_reason || 'We suspected unusual activity on your account'}</span>
                               </div>
                             )}
 
@@ -2105,15 +2105,15 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     </p>
                   </div>
                   <p className="text-[11px] text-amber-300/90 leading-tight">
-                    Confirming reactivation below will immediately clear all failed password attempts from D1 and restore full access to this administrator.
+                    Confirming reactivation below will immediately clear all failed password attempts from D1 and restore full access to this administrator
                   </p>
                 </div>
               )}
 
               <p className="text-xs text-slate-300 leading-relaxed">
                 {suspendingUser.status === 'suspended'
-                  ? 'Reactivating this account will restore this user\'s access to the portal immediately.'
-                  : 'Temporarily suspending this user will immediately revoke their ability to sign in until reactivated.'}
+                  ? 'Reactivating this account will restore this user\'s access to the portal immediately'
+                  : 'Temporarily suspending this user will immediately revoke their ability to sign in until reactivated'}
               </p>
 
               <form onSubmit={handleToggleSuspend} className="space-y-4">
@@ -2137,8 +2137,8 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                     </select>
                     <p className="text-[10px] text-slate-400 mt-1">
                       {suspendDurationDays === '0'
-                        ? 'User will remain suspended indefinitely until manually reactivated.'
-                        : `User will be suspended and automatically reactivated after ${suspendDurationDays} day(s).`}
+                        ? 'User will remain suspended indefinitely until manually reactivated'
+                        : `User will be suspended and automatically reactivated after ${suspendDurationDays} day(s)`}
                     </p>
                   </div>
                 )}
@@ -2153,11 +2153,11 @@ export default function AdminPanelModal({ isOpen, onClose, currentUser }) {
                       rows={2}
                       value={suspendReason}
                       onChange={(e) => setSuspendReason(e.target.value)}
-                      placeholder="We suspected unusual activity on your account."
+                      placeholder="We suspected unusual activity on your account"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">
-                      Reason shown to user upon login or active session termination.
+                      Reason shown to user upon login or active session termination
                     </p>
                   </div>
                 )}

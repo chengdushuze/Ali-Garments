@@ -1,53 +1,21 @@
 import * as XLSX from 'xlsx';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
+import { saveFileToDevice } from './fileSaver';
 
 /**
- * Universal file saver for Web and Android Capacitor:
- * 1. If running inside Android APK with AndroidExcelBridge, saves directly to the Android "Downloads" folder!
+ * Universal safe Excel file saver
+ * 1. If running inside Android APK with AndroidDownloadBridge / AndroidExcelBridge, saves directly to Android "Download" directory.
  * 2. If running inside native Capacitor, uses Filesystem to write to external/public storage.
- * 3. In Web browser, triggers standard browser download via XLSX.writeFile.
+ * 3. In Web browser, triggers standard browser download.
  * Returns { success: boolean, filename: string, location: string }
  */
 export async function saveWorkbook(wb, filename) {
   try {
-    // 1. Android Native Bridge (Guaranteed save directly into Android's Downloads directory)
-    if (typeof window !== 'undefined' && window.AndroidExcelBridge && typeof window.AndroidExcelBridge.saveExcelToDownloads === 'function') {
-      const base64Data = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-      const ok = window.AndroidExcelBridge.saveExcelToDownloads(filename, base64Data);
-      if (ok) {
-        return { success: true, filename, location: 'Android Downloads folder' };
-      }
-    }
-
-    // 2. Capacitor Native Platform
-    if (Capacitor.isNativePlatform()) {
-      const base64Data = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-      try {
-        await Filesystem.writeFile({
-          path: `Download/${filename}`,
-          data: base64Data,
-          directory: Directory.External,
-          recursive: true
-        });
-        return { success: true, filename, location: 'Downloads folder' };
-      } catch (e) {
-        // Fallback to Documents
-        await Filesystem.writeFile({
-          path: filename,
-          data: base64Data,
-          directory: Directory.Documents,
-          recursive: true
-        });
-        return { success: true, filename, location: 'Documents folder' };
-      }
-    }
-
-    // 3. Web Browser standard download
-    XLSX.writeFile(wb, filename);
-    return { success: true, filename, location: 'Downloads' };
+    const base64Data = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+    return await saveFileToDevice(filename, base64Data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   } catch (err) {
-    console.error('Failed to save workbook:', err);
+    console.error('Failed to save workbook via device saver, falling back to XLSX:', err);
     try {
       XLSX.writeFile(wb, filename);
       return { success: true, filename, location: 'Downloads' };
