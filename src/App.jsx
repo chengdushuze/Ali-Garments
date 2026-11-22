@@ -411,6 +411,10 @@ export default function App() {
       console.error('Logout error:', e);
     }
 
+    // Graceful animation pause so the user sees the session closing smoothly
+    setLogoutSyncStatus('Session secured. Returning to login screen...');
+    await new Promise(r => setTimeout(r, 750));
+
     clearStoredToken();
     await clearAllLocalDeviceData();
     setCurrentUser(null);
@@ -1212,8 +1216,8 @@ export default function App() {
 
         {/* Master-Detail Ledger Grid (Phone: CustomerList or CustomerDetail depending on selection; Desktop: side-by-side) */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start ${mobileTab === 'stats' ? 'hidden md:grid' : 'grid'}`}>
-          {/* Left Column: Customer Directory (5 cols on lg, full on mobile if no detail view) */}
-          <div className={`lg:col-span-5 h-auto ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
+          {/* Left Column: Customer Directory (4 cols on lg, full on mobile if no detail view) */}
+          <div className={`lg:col-span-4 h-auto ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px] ${selectedCustomer ? 'hidden lg:block' : 'block'}`}>
             <CustomerList
               customers={customers}
               onSelectCustomer={cust => setSelectedCustomer(cust)}
@@ -1228,8 +1232,8 @@ export default function App() {
             />
           </div>
 
-          {/* Right Column: Customer Ledger Details & Transactions (7 cols on lg; Fixed full-screen on mobile so bottom action buttons are always pinned) */}
-          <div className={`lg:col-span-7 flex flex-col ${
+          {/* Right Column: Customer Ledger Details & Transactions (8 cols on lg; Fixed full-screen on mobile so bottom action buttons are always pinned) */}
+          <div className={`lg:col-span-8 flex flex-col ${
             selectedCustomer
               ? `fixed inset-0 z-40 bg-white dark:bg-slate-900 lg:static lg:z-auto ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px]`
               : `hidden lg:block ${isDesktopStatsCollapsed ? 'lg:h-[calc(100vh-140px)]' : 'lg:h-[calc(100vh-270px)]'} lg:min-h-[640px]`
@@ -1428,7 +1432,7 @@ export default function App() {
       />
 
       {/* 9. Logout Confirmation Consent Modal (Website own popup - Zero Chrome popups) */}
-      {isLogoutConsentOpen && (
+      {isLogoutConsentOpen && !isLoggingOut && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
             <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 mx-auto flex items-center justify-center shadow-lg shadow-rose-950/40">
@@ -1488,32 +1492,57 @@ export default function App() {
                   </p>
                 </div>
 
-                {isLoggingOut ? (
-                  <div className="py-3 px-4 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-center gap-2.5 text-xs text-emerald-400 font-medium">
-                    <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-                    <span>{logoutSyncStatus || 'Saving unsaved data to D1...'}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsLogoutConsentOpen(false)}
-                      className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      Stay Signed In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleLogout(false)}
-                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-950/50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <CloudUpload className="w-4 h-4" />
-                      <span>Save & Sign Out</span>
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsLogoutConsentOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Stay Signed In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLogout(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-950/50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <CloudUpload className="w-4 h-4" />
+                    <span>Save & Sign Out</span>
+                  </button>
+                </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Logout Smooth Animation Screen */}
+      {isLoggingOut && (
+        <div className="fixed inset-0 z-[120] flex flex-col items-center justify-center p-6 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="max-w-sm w-full bg-slate-900 border border-slate-800/80 rounded-3xl p-7 text-center shadow-2xl space-y-5">
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-rose-500/20 animate-ping opacity-60" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white shadow-xl shadow-rose-950/70">
+                <LogOut className="w-8 h-8 animate-pulse stroke-[2.5]" />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white">
+                Logging Out • لاگ آؤٹ ہو رہے ہیں
+              </h3>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                {logoutSyncStatus || 'Safely securing session and synchronizing records to Cloudflare D1...'}
+              </p>
+            </div>
+
+            <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
+              <div className="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 rounded-full animate-[pulse_1s_infinite] w-full" />
+            </div>
+
+            <p className="text-[11px] font-mono font-semibold text-emerald-400/90 flex items-center justify-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>Session Secured • خدا حافظ</span>
+            </p>
           </div>
         </div>
       )}

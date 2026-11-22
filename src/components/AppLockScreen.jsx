@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Lock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X, Clock } from 'lucide-react';
+import { ShieldCheck, Lock, Unlock, Delete, KeyRound, AlertCircle, Eye, EyeOff, X, Clock } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -15,6 +15,7 @@ export default function AppLockScreen({
   const [enteredPin, setEnteredPin] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isShaking, setIsShaking] = useState(false);
+  const [isUnlockSuccess, setIsUnlockSuccess] = useState(false);
   const [showPasswordFallback, setShowPasswordFallback] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
   const [showAccountPassword, setShowAccountPassword] = useState(false);
@@ -124,12 +125,16 @@ export default function AppLockScreen({
     if (nextPin.length === 4) {
       // Validate PIN
       if (nextPin === configuredPin) {
+        setIsUnlockSuccess(true);
         // Clear failed attempts upon success
         try {
           sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
           sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
         } catch (e) {}
-        onUnlock();
+        setTimeout(() => {
+          onUnlock();
+          setIsUnlockSuccess(false);
+        }, 650);
       } else {
         recordFailedAttempt();
       }
@@ -173,11 +178,15 @@ export default function AppLockScreen({
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        setIsUnlockSuccess(true);
         try {
           sessionStorage.removeItem(ATTEMPTS_STORAGE_KEY);
           sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
         } catch (e) {}
-        onUnlock();
+        setTimeout(() => {
+          onUnlock();
+          setIsUnlockSuccess(false);
+        }, 650);
       } else {
         setFallbackError(data.error || 'Incorrect account password.');
       }
@@ -197,8 +206,32 @@ export default function AppLockScreen({
 
       {/* Main Lock Container */}
       <div className="w-full max-w-sm flex flex-col items-center relative z-10">
-        {/* Brand Logo & Lock Status */}
-        <div className="relative mb-3">
+        {isUnlockSuccess ? (
+          <div className="flex flex-col items-center justify-center p-6 text-center animate-in zoom-in-95 duration-300 space-y-4">
+            <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/30 animate-ping opacity-80" />
+              <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-2xl shadow-emerald-950/80 scale-105 transition-all">
+                <Unlock className="w-10 h-10 stroke-[2.5] animate-bounce" />
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black text-white tracking-tight">
+                PIN Verified • پن درست ہے
+              </h2>
+              <p className="text-xs font-semibold text-emerald-400 mt-1">
+                Access Granted • خوش آمدید
+              </p>
+            </div>
+
+            <div className="w-48 bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-700/60 mt-3">
+              <div className="h-full bg-gradient-to-r from-teal-400 to-emerald-500 rounded-full animate-[pulse_0.6s_infinite] w-full" />
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Brand Logo & Lock Status */}
+            <div className="relative mb-3">
           <img
             src="/logo.png"
             alt="ALI Garments"
@@ -408,6 +441,8 @@ export default function AppLockScreen({
               </div>
             </form>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

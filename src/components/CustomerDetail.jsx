@@ -140,82 +140,102 @@ export default function CustomerDetail({
       {/* DESKTOP / PC PROFILE HEADER (>= md) - Maximum Ledger Visibility */}
       {/* ============================================================== */}
       <div className="hidden md:block px-4 py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-950/60 space-y-2.5 shrink-0">
-        {/* Row 1: Left Party Info & Right Balance + Action Toolbar */}
-        <div className="flex items-center justify-between gap-3">
-          {/* Left: Avatar + Party Name + Category + Phone + Address */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm flex items-center justify-center shadow-sm shrink-0">
+        {/* Row 1: Full Customer Identity on Left & Net Balance on Right (NO TRUNCATE) */}
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Avatar + Full Party Name + Category Badge + Phone + Address */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-black text-sm sm:text-base flex items-center justify-center shadow-sm shrink-0">
               {customer.name ? customer.name.slice(0, 2).toUpperCase() : 'AG'}
             </div>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-slate-900 dark:text-white leading-tight truncate">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-tight">
                   {customer.name}
                 </h2>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0">
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0">
                   {customer.category || 'Wholesale'}
                 </span>
+                {onOpenEditCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenEditCustomer(customer)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                    title="Edit Party Details"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center gap-2.5 mt-0.5 text-xs text-slate-500">
+              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
                 {customer.phone && (
                   <a
                     href={`tel:${customer.phone}`}
-                    className="inline-flex items-center gap-1 font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    className="inline-flex items-center gap-1.5 font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                   >
-                    <Phone className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <Phone className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>{customer.phone}</span>
                   </a>
                 )}
                 {customer.phone && customer.address && <span className="text-slate-300 dark:text-slate-700">•</span>}
                 {customer.address && (
-                  <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 truncate max-w-sm">
-                    <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                    <span className="truncate">{customer.address}</span>
+                  <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{customer.address}</span>
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Right: Net Balance Badge & Sleek Desktop Action Toolbar */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="text-right">
-              <span className={`text-[10px] font-black uppercase tracking-wider block leading-none ${
-                bal > 0 ? 'text-emerald-600 dark:text-emerald-400' : bal < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'
-              }`}>
-                {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Settled'}
-              </span>
-              <div
-                className={`text-lg font-black font-mono tabular-nums whitespace-nowrap leading-tight mt-0.5 ${
-                  bal > 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : bal < 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                {currency}&nbsp;{Math.abs(bal).toLocaleString()}
-              </div>
+          {/* Right: Prominent Net Balance Badge */}
+          <div className="text-right shrink-0 pl-3">
+            <span className={`text-[10px] font-black uppercase tracking-wider block leading-none ${
+              bal > 0 ? 'text-emerald-600 dark:text-emerald-400' : bal < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'
+            }`}>
+              {bal > 0 ? "You'll Receive" : bal < 0 ? "You'll Give" : 'Settled'}
+            </span>
+            <div
+              className={`text-lg sm:text-xl font-black font-mono tabular-nums whitespace-nowrap leading-tight mt-1 ${
+                bal > 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : bal < 0
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {currency}&nbsp;{Math.abs(bal).toLocaleString()}
             </div>
+          </div>
+        </div>
 
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+        {/* Row 2: "You Gave" & "You Got" on Left + Action Toolbar & Ledger Summary on Right */}
+        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 flex-wrap">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onOpenAddTransaction(customer, 'give')}
+              className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl font-black text-xs bg-rose-600 hover:bg-rose-500 text-white shadow-xs transition-all cursor-pointer active:scale-95"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>+ You Gave (ادھار دیا)</span>
+            </button>
 
-            {/* Sleek Toolbar for PC */}
-            <div className="flex items-center gap-1.5">
-              {onOpenEditCustomer && (
-                <button
-                  type="button"
-                  onClick={() => onOpenEditCustomer(customer)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition-colors shadow-xs cursor-pointer"
-                  title="Edit Party Details"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
-              )}
+            <button
+              type="button"
+              onClick={() => onOpenAddTransaction(customer, 'get')}
+              className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl font-black text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer active:scale-95"
+            >
+              <ArrowDownLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>+ You Got (وصولی ملی)</span>
+            </button>
+          </div>
 
+          {/* Action Toolbar + Summary Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={handleSendWhatsAppReminder}
@@ -257,47 +277,25 @@ export default function CustomerDetail({
                 </button>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Row 2: "You Gave" & "You Got" + Given/Received/Entries Summary Bar */}
-        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-800/80 flex-wrap">
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenAddTransaction(customer, 'give')}
-              className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl font-black text-xs bg-rose-600 hover:bg-rose-500 text-white shadow-xs transition-all cursor-pointer active:scale-95"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>+ You Gave (ادھار دیا)</span>
-            </button>
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
 
-            <button
-              type="button"
-              onClick={() => onOpenAddTransaction(customer, 'get')}
-              className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl font-black text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer active:scale-95"
-            >
-              <ArrowDownLeft className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>+ You Got (وصولی ملی)</span>
-            </button>
-          </div>
+            {/* Inline Ledger Summary Strip */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <div className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
+                <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase mr-1">Given:</span>
+                <span className="font-mono font-extrabold text-rose-700 dark:text-rose-300">{currency} {totalGiven.toLocaleString()}</span>
+              </div>
 
-          {/* Inline Ledger Summary Strip */}
-          <div className="flex items-center gap-2 text-xs">
-            <div className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
-              <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase mr-1.5">Given:</span>
-              <span className="font-mono font-extrabold text-rose-700 dark:text-rose-300">{currency} {totalGiven.toLocaleString()}</span>
-            </div>
+              <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50">
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mr-1">Received:</span>
+                <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">{currency} {totalGot.toLocaleString()}</span>
+              </div>
 
-            <div className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50">
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mr-1.5">Received:</span>
-              <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">{currency} {totalGot.toLocaleString()}</span>
-            </div>
-
-            <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              <span className="text-[10px] font-bold text-slate-500 uppercase mr-1">Entries:</span>
-              <span className="font-mono font-extrabold text-slate-800 dark:text-slate-200">{transactions.length}</span>
+              <div className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] font-bold text-slate-500 uppercase mr-1">Entries:</span>
+                <span className="font-mono font-extrabold text-slate-800 dark:text-slate-200">{transactions.length}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -566,94 +564,101 @@ export default function CustomerDetail({
 
             return (
               <div key={tx.id}>
-                {/* 1. DESKTOP SINGLE-LINE LEDGER ROW (>= md) - Clean, Spacious Table Row */}
+                {/* 1. DESKTOP LEDGER ROW (>= md) - Full Details Visible, Zero Text Truncation */}
                 <div
-                  className={`hidden md:flex items-center justify-between gap-3 py-2 px-3 rounded-xl border transition-all ${
+                  className={`hidden md:block py-2.5 px-3.5 rounded-xl border transition-all ${
                     isSelected
                       ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800'
                       : 'bg-white dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 shadow-xs'
                   }`}
                 >
-                  {/* Left: Checkbox + Date & Time + Tag Badge + Bill # + Payment Method */}
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleSelectTx(tx.id)}
-                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
-                    />
+                  {/* Top Line: Date & Time, Tag Badge, Bill #, Mode, Running Balance, Amount & Delete */}
+                  <div className="flex items-center justify-between gap-2.5 pb-1.5 border-b border-slate-100 dark:border-slate-700/40">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelectTx(tx.id)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                      />
 
-                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="whitespace-nowrap">{formattedDate}</span>
-                      {formattedTime && (
-                        <span className="text-[11px] font-normal text-slate-400 whitespace-nowrap">
-                          • {formattedTime}
+                      <div className="flex items-center gap-1 font-mono text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="whitespace-nowrap">{formattedDate}</span>
+                        {formattedTime && (
+                          <span className="text-[11px] font-normal text-slate-400 whitespace-nowrap">
+                            • {formattedTime}
+                          </span>
+                        )}
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${
+                          isDebit
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDebit ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                        <span>{isDebit ? 'Maal Diya (Debit)' : 'Paisa Mila (Credit)'}</span>
+                      </span>
+
+                      {cleanBill && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 whitespace-nowrap shrink-0">
+                          Bill #{cleanBill}
+                        </span>
+                      )}
+
+                      {tx.paymentMethod && (
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                          {tx.paymentMethod}
                         </span>
                       )}
                     </div>
 
-                    <span
-                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${
-                        isDebit
-                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60'
-                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDebit ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                      <span>{isDebit ? 'Maal Diya (Debit)' : 'Paisa Mila (Credit)'}</span>
-                    </span>
+                    {/* Right: Amount & Running Balance + Delete button */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      {tx.balanceAfter !== undefined && (
+                        <span className="text-[11px] text-slate-400 font-mono whitespace-nowrap">
+                          Bal: {currency}&nbsp;{Number(tx.balanceAfter).toLocaleString()}
+                        </span>
+                      )}
 
-                    {cleanBill && (
-                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 whitespace-nowrap shrink-0">
-                        #{cleanBill}
-                      </span>
-                    )}
+                      <div
+                        className={`text-sm sm:text-base font-black font-mono tabular-nums whitespace-nowrap ${
+                          isDebit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {isDebit ? '+' : '-'} {currency}&nbsp;{Number(tx.amount || 0).toLocaleString()}
+                      </div>
 
-                    {tx.paymentMethod && (
-                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                        {tx.paymentMethod}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Center: Description */}
-                  <div className="flex-1 min-w-0 px-2">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
-                      {tx.description || (isDebit ? 'Garments / Goods Supplied' : 'Payment Received')}
-                    </span>
-                  </div>
-
-                  {/* Right: Running Balance + Amount + Delete Action */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    {tx.balanceAfter !== undefined && (
-                      <span className="text-[11px] text-slate-400 font-mono whitespace-nowrap">
-                        Bal: {currency}&nbsp;{Number(tx.balanceAfter).toLocaleString()}
-                      </span>
-                    )}
-
-                    <div
-                      className={`text-sm font-black font-mono tabular-nums whitespace-nowrap ${
-                        isDebit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-                      }`}
-                    >
-                      {isDebit ? '+' : '-'} {currency}&nbsp;{Number(tx.amount || 0).toLocaleString()}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onRequestDeleteTransaction) {
+                            onRequestDeleteTransaction(customer, tx);
+                          } else if (onDeleteTransaction) {
+                            onDeleteTransaction(customer.id, tx.id);
+                          }
+                        }}
+                        title="Delete Entry"
+                        className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (onRequestDeleteTransaction) {
-                          onRequestDeleteTransaction(customer, tx);
-                        } else if (onDeleteTransaction) {
-                          onDeleteTransaction(customer.id, tx.id);
-                        }
-                      }}
-                      title="Delete Entry"
-                      className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Bottom Line: Full Description with NO TRUNCATE (Full text like "Garments Supplied", "Payment Received", etc.) */}
+                  <div className="pt-1.5 flex items-start justify-between gap-2">
+                    <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white break-words leading-snug">
+                      {tx.description || (isDebit ? 'Garments Supplied' : 'Payment Received')}
+                    </div>
+                    {tx.notes && (
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 italic shrink-0">
+                        Note: {tx.notes}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -707,7 +712,7 @@ export default function CustomerDetail({
                         className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white break-words leading-snug">
                           {tx.description || (isDebit ? 'Garments / Goods Supplied' : 'Payment Received')}
                         </p>
                         {tx.paymentMethod && (

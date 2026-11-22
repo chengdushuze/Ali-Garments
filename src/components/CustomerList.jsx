@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Phone, MapPin, ChevronRight, X, ArrowDownLeft, ArrowUpRight, Edit3 } from 'lucide-react';
+import { Search, UserPlus, Phone, MapPin, ChevronRight, X, ArrowDownLeft, ArrowUpRight, Edit3, ChevronDown, Filter } from 'lucide-react';
 
 export default function CustomerList({
   customers,
@@ -92,8 +92,30 @@ export default function CustomerList({
           )}
         </div>
 
-        {/* Filter Tabs (Segmented Control) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
+        {/* Mobile Filter Dropdown Picker (sm:hidden) - Zero Side-Scrolling! */}
+        <div className="block sm:hidden py-0.5">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
+              <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <select
+              value={filterTab}
+              onChange={e => setFilterTab(e.target.value)}
+              className="w-full appearance-none pl-9 pr-9 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+            >
+              <option value="all">📋 All Parties & Customers ({customers.length})</option>
+              <option value="receivable">🟢 Lene Hain • You'll Receive ({receivableCount})</option>
+              <option value="payable">🔴 Dene Hain • You'll Give ({payableCount})</option>
+              <option value="settled">⚪ Settled • Zero Balance ({settledCount})</option>
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop / Tablet Segmented Buttons (hidden sm:flex) */}
+        <div className="hidden sm:flex items-center gap-1.5 py-0.5 text-xs">
           <button
             onClick={() => setFilterTab('all')}
             className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer ${

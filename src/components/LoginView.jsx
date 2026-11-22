@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Shield, AlertCircle, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { getCachedAuthUser, setCachedAuthUser } from '../services/storage';
 import { apiFetch, setStoredToken } from '../services/apiClient';
 
@@ -9,6 +9,16 @@ export default function LoginView({ onLoginSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [loginSuccessUser, setLoginSuccessUser] = useState(null);
+
+  const triggerSuccessAnimation = (user) => {
+    setLoginSuccessUser(user);
+    setTimeout(() => {
+      if (onLoginSuccess) {
+        onLoginSuccess(user);
+      }
+    }, 750);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,9 +57,7 @@ export default function LoginView({ onLoginSuccess }) {
             setStoredToken(data.token);
           }
           await setCachedAuthUser(data.user);
-          if (onLoginSuccess) {
-            onLoginSuccess(data.user);
-          }
+          triggerSuccessAnimation(data.user);
           return;
         } else {
           // If 429 Rate limited (3 attempts / 15 minutes)
@@ -84,7 +92,7 @@ export default function LoginView({ onLoginSuccess }) {
           setIsLoading(false);
           return;
         }
-        if (onLoginSuccess) onLoginSuccess(cached);
+        triggerSuccessAnimation(cached);
         return;
       }
 
@@ -97,6 +105,44 @@ export default function LoginView({ onLoginSuccess }) {
       setIsLoading(false);
     }
   };
+
+  if (loginSuccessUser) {
+    return (
+      <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-4 select-none animate-in fade-in duration-300">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-sm w-full bg-slate-900/90 border border-slate-800/80 rounded-3xl p-8 text-center shadow-2xl space-y-5 animate-in zoom-in-95 duration-300 relative z-10 backdrop-blur-md">
+          <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full bg-emerald-500/30 animate-ping opacity-75" />
+            <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-2xl shadow-emerald-950/80 scale-105">
+              <CheckCircle2 className="w-10 h-10 stroke-[2.5] animate-bounce" />
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-black text-white tracking-tight">
+              Welcome Back! • خوش آمدید
+            </h2>
+            <p className="text-xs font-semibold text-emerald-400 mt-1">
+              Login Successful • لاگ اِن کامیاب
+            </p>
+            <p className="text-xs font-mono text-slate-400 mt-2 truncate">
+              {loginSuccessUser.name || loginSuccessUser.email}
+            </p>
+          </div>
+
+          <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden p-0.5 border border-slate-700/60">
+            <div className="h-full bg-gradient-to-r from-teal-400 to-emerald-500 rounded-full animate-[pulse_0.6s_infinite] w-full" />
+          </div>
+
+          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span>Loading Ledgers & Cloudflare D1...</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen max-h-screen overflow-hidden w-full flex flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-slate-100 p-3 sm:p-6 select-none pt-safe pb-safe">
