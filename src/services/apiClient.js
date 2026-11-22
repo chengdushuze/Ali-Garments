@@ -8,14 +8,23 @@
  * 3. Global Interceptor: Reacts instantly to suspension, deletion, session invalidation, VPN blocks, and geo blocks.
  */
 
+export function getApiBaseUrl() {
+  if (typeof window === 'undefined') return 'https://ali-garments.pages.dev';
+  const host = window.location.hostname || '';
+  // Only when running on Cloudflare Pages web production do we use relative URLs
+  if (host === 'ali-garments.pages.dev' || host.endsWith('.pages.dev')) {
+    return '';
+  }
+  // Android APK (Capacitor, localhost, 127.0.0.1, file:) MUST connect to live Cloudflare backend
+  return 'https://ali-garments.pages.dev';
+}
+
 export const IS_NATIVE_OR_LOCALHOST = typeof window !== 'undefined' && (
-  window.location.hostname === 'localhost' ||
-  window.location.protocol === 'capacitor:' ||
-  window.location.protocol === 'file:' ||
-  Boolean(window.Capacitor?.isNativePlatform?.())
+  window.location.hostname !== 'ali-garments.pages.dev' &&
+  !window.location.hostname.endsWith('.pages.dev')
 );
 
-export const API_BASE_URL = IS_NATIVE_OR_LOCALHOST ? 'https://ali-garments.pages.dev' : '';
+export const API_BASE_URL = getApiBaseUrl();
 
 // In-memory token cache (Zero plain text in web localStorage)
 let inMemoryToken = '';
@@ -90,7 +99,8 @@ export function clearStoredToken() {
 }
 
 export async function apiFetch(endpoint, options = {}) {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const base = getApiBaseUrl();
+  const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
   const headers = { ...(options.headers || {}) };
 
   const token = getStoredToken();

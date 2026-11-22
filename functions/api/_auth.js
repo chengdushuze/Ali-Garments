@@ -68,15 +68,20 @@ export function getCorsHeaders(request) {
     origin === 'https://ali-garments.pages.dev' ||
     origin === 'capacitor://localhost' ||
     origin === 'ionic://localhost' ||
+    origin === 'https://localhost' ||
+    origin.startsWith('https://localhost') ||
     origin.startsWith('http://localhost') ||
-    origin.startsWith('http://127.0.0.1');
+    origin.startsWith('http://127.0.0.1') ||
+    origin.startsWith('https://127.0.0.1') ||
+    origin.startsWith('capacitor://') ||
+    origin.startsWith('ionic://');
 
-  const corsOrigin = isAllowed && origin ? origin : 'https://ali-garments.pages.dev';
+  const corsOrigin = isAllowed && origin ? origin : (origin || 'https://ali-garments.pages.dev');
 
   return {
     'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, X-Requested-With, x-requested-with',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
   };
