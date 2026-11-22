@@ -103,12 +103,12 @@ export async function onRequestPost(context) {
       if (totalEmailFailures >= 6) {
         // Automatically suspend user in D1 database (Super admin is protected)
         await env.DB.prepare(
-          "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
+          "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to unusual failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
         ).bind(cleanEmail).run().catch(() => {});
 
         return new Response(
           JSON.stringify({
-            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            error: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator',
             isSuspended: true,
             autoSuspended: true
           }),
@@ -300,13 +300,13 @@ export async function onRequestPost(context) {
       if (emailFailuresCount >= 6) {
         if (env.DB) {
           await env.DB.prepare(
-            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
+            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to unusual failed password attempts' WHERE LOWER(email) = ? AND role != 'super_admin'"
           ).bind(cleanEmail).run().catch(() => {});
         }
 
         return new Response(
           JSON.stringify({
-            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            error: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator',
             isSuspended: true,
             autoSuspended: true,
             totalFailures: emailFailuresCount

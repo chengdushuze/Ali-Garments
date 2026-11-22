@@ -118,12 +118,12 @@ export async function onRequestPost(context) {
 
         if (Number(dayStats?.total || 0) >= 6 && user.role !== 'super_admin') {
           await env.DB.prepare(
-            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE id = ?"
+            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to unusual failed password attempts' WHERE id = ?"
           ).bind(user.id).run().catch(() => {});
 
           return new Response(JSON.stringify({
             success: false,
-            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            error: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator',
             isSuspended: true,
             autoSuspended: true
           }), {
@@ -186,14 +186,14 @@ export async function onRequestPost(context) {
       if (failuresCount >= 6) {
         if (env.DB && user.role !== 'super_admin') {
           await env.DB.prepare(
-            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to 6 failed password attempts' WHERE id = ?"
+            "UPDATE users SET status = 'suspended', suspension_reason = 'Account automatically suspended due to unusual failed password attempts' WHERE id = ?"
           ).bind(user.id).run().catch(() => {});
         }
 
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator',
+            error: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator',
             isSuspended: true,
             autoSuspended: true
           }),

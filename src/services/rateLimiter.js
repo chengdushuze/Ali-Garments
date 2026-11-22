@@ -51,7 +51,7 @@ export function checkAccountPasswordRateLimit(identifier = 'account_password') {
       secondsLeft: 0,
       attemptsLeft: 0,
       totalFailures,
-      errorMessage: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator'
+      errorMessage: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator'
     };
   }
 
@@ -121,7 +121,7 @@ export function recordAccountPasswordFailure(identifier = 'account_password', em
       secondsLeft: 0,
       attemptsLeft: 0,
       totalFailures,
-      errorMessage: 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator'
+      errorMessage: 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator'
     };
   }
 

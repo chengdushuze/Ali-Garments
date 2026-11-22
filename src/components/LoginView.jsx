@@ -77,7 +77,7 @@ export default function LoginView({ onLoginSuccess }) {
           // If 403 Auto-Suspended or Administrator Suspended
           if (data.isSuspended || response.status === 403) {
             recordAccountPasswordFailure(cleanEmail, cleanEmail);
-            const rawMsg = data.error || 'Your account has been automatically suspended due to 6 failed password attempts Please contact administrator';
+            const rawMsg = data.error || 'Your account has been automatically suspended due to unusual failed password attempts Please contact administrator';
             setErrorMessage(rawMsg.replace(/\./g, ''));
             setIsLoading(false);
             return;
